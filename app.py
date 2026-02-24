@@ -205,7 +205,7 @@ if selected_ticker:
                                             var_name='Gösterge', 
                                             value_name='Fiyat')
 
-            # --- HİSSE DETAY ANALİZİ (GÜNCEL VE HATASIZ BLOK) ---
+         # --- HİSSE DETAY ANALİZİ (KAPANIŞ YEŞİL VE HATASIZ) ---
 st.markdown("---")
 st.subheader("📈 Hisse Detay Analizi")
 
@@ -214,47 +214,42 @@ selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:"
 
 if selected_ticker:
     try:
-        # Veri çekme
+        # Veri çekme (SMA200 için 2 yıllık veri çekiyoruz)
         hisse_obj = yf.Ticker(selected_ticker)
-        detail_data = hisse_obj.history(period="2y") 
+        detail_data = hisse_obj.history(period="2y")
         
         if not detail_data.empty:
             # Teknik Göstergeler
             detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
             detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
             
-            # Son 6 aylık veriyi hazırla
+            # Son 6 ayı filtrele ve sütun ismini değiştir
             plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna()
+            plot_df = plot_df.rename(columns={'Close': 'Kapanış'})
             
-            if not plot_df.empty:
-                # Sütun ismini değiştir
-                plot_df = plot_df.rename(columns={'Close': 'Kapanış'})
-                
-                # Altair için veriyi düzelt (Reset index ve Melt)
-                plot_df = plot_df.reset_index()
-                plot_df_long = plot_df.melt(id_vars=['Date'], 
-                                            value_vars=['Kapanış', 'SMA50', 'SMA200'],
-                                            var_name='Gösterge', 
-                                            value_name='Fiyat')
+            # Altair için veriyi hazırla (Reset index ve Melt)
+            plot_df = plot_df.reset_index()
+            plot_df_long = plot_df.melt(id_vars=['Date'], 
+                                        value_vars=['Kapanış', 'SMA50', 'SMA200'],
+                                        var_name='Gösterge', 
+                                        value_name='Fiyat')
 
-                # Altair Grafiği (Yeşil Kapanış Çizgisiyle)
-                chart = alt.Chart(plot_df_long).mark_line().encode(
-                    x=alt.X('Date:T', title='Tarih'),
-                    y=alt.Y('Fiyat:Q', title='Fiyat (TL)', scale=alt.Scale(zero=False)),
-                    color=alt.Color('Gösterge:N',
-                                    scale={'domain': ['Kapanış', 'SMA50', 'SMA200'],
-                                           'range': ['green', '#FFA500', '#FF4500']},
-                                    legend=alt.Legend(title="Göstergeler")),
-                    tooltip=['Date', 'Gösterge', 'Fiyat']
-                ).interactive()
+            # Altair Grafiği (Yeşil Kapanış Çizgisi)
+            chart = alt.Chart(plot_df_long).mark_line().encode(
+                x=alt.X('Date:T', title='Tarih'),
+                y=alt.Y('Fiyat:Q', title='Fiyat (TL)', scale=alt.Scale(zero=False)),
+                color=alt.Color('Gösterge:N',
+                                scale={'domain': ['Kapanış', 'SMA50', 'SMA200'],
+                                       'range': ['green', '#FFA500', '#FF4500']}, # Kapanış YEŞİL
+                                legend=alt.Legend(title="Göstergeler")),
+                tooltip=['Date', 'Gösterge', 'Fiyat']
+            ).properties(height=400).interactive()
 
-                st.altair_chart(chart, use_container_width=True)
-            else:
-                st.warning("Bu hisse için yeterli işlem geçmişi (SMA200 için 200 gün) bulunamadı.")
-        
+            st.altair_chart(chart, use_container_width=True)
+            
         else:
-            st.error("Veri çekilemedi.")
+            st.error("Seçilen hisse için veri bulunamadı.")
 
     except Exception as e:
-        # İŞTE EKSİK OLAN VE HATAYA SEBEP OLAN BLOK BURASIYDI:
-        st.error(f"Grafik oluşturulurken bir hata oluştu: {e}")
+        # İşte eksik olan 'except' bloğu burasıydı, hatayı bu satır çözer:
+        st.error(f"Grafik yüklenirken bir sorun oluştu: {e}")

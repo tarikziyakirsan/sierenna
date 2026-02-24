@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
+import altair as alt
 
 # Sayfa Yapılandırması
 st.set_page_config(page_title="BIST Tüm Evren Analizi", layout="wide")
@@ -187,13 +188,40 @@ if selected_ticker:
             # Sadece son 6 ayı görselleştirelim (ama hesaplama 2 yıllık veriden yapılsın)
             plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna(how='all')
             
+           # --- VERİ HAZIRLIĞI VE İSİM DEĞİŞİKLİĞİ ---
+            # Sadece son 6 ayı görselleştirelim (ama hesaplama 2 yıllık veriden yapılsın)
+            plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna()
+
             if not plot_df.empty:
-                st.line_chart(plot_df)
-                st.info(f"**{selected_ticker}** için Kapanış Fiyatı (Mavi), SMA50 (Turuncu) ve SMA200 (Kırmızı) gösteriliyor.")
+                # 1. "Close" sütununu "Kapanış" olarak yeniden adlandır
+                plot_df = plot_df.rename(columns={'Close': 'Kapanış'})
+                
+                # 2. Altair için veriyi hazırlayalım (Tarih index'ten sütuna alınır)
+                plot_df = plot_df.reset_index()
+                
+                # Veriyi "uzun" formata çevir (Altair'in renkleri ayırması için gerekli)
+                plot_df_long = plot_df.melt(id_vars=['Date'], 
+                                            value_vars=['Kapanış', 'SMA50', 'SMA200'],
+                                            var_name='Gösterge', 
+                                            value_name='Fiyat')
+
+                # --- ALTAIR İLE ÖZEL RENKLİ GRAFİK ÇİZİMİ ---
+                chart = alt.Chart(plot_df_long).mark_line().encode(
+                    x=alt.X('Date:T', axis=alt.Axis(title='Tarih', format='%Y-%m-%d')),
+                    y=alt.Y('Fiyat:Q', title='Fiyat (TL)'),
+                    # RENK AYARI BURADA YAPILIYOR:
+                    color=alt.Color('Gösterge:N',
+                                    scale={'domain': ['Kapanış', 'SMA50', 'SMA200'],
+                                           'range': ['green', '#FFA500', '#FF4500']}, # Kapanış=Yeşil, Diğerleri=Turuncu/Kırmızı tonları
+                                    legend=alt.Legend(title="Göstergeler")),
+                    tooltip=[alt.Tooltip('Date:T', title='Tarih', format = '%Y-%m-%d'),
+                             alt.Tooltip('Gösterge:N'),
+                             alt.Tooltip('Fiyat:Q', format='.2f')]
+                ).properties(
+                    title=f'{selected_ticker} Detaylı Fiyat Analizi'
+                ).interactive() # Grafiği yakınlaştırıp uzaklaştırmayı sağlar
+
+                st.altair_chart(chart, use_container_width=True)
+                # st.info yazısını kaldırdık çünkü artık grafik lejantında renkler net görünüyor.
             else:
-                st.warning("Bu hisse için yeterli işlem geçmişi (SMA200 için 200 gün) bulunamadı.")
-        else:
-            st.error("Veri çekilemedi. Lütfen daha sonra tekrar deneyin.")
-            
-    except Exception as e:
-        st.error(f"Grafik yüklenirken bir teknik hata oluştu: {e}")
+                st.warning("Bu hisse için yeterli işlem geçmişi (SMA200 için 200 gün) bulunamadı ve grafik çizilemedi.")

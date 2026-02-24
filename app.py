@@ -188,28 +188,13 @@ if selected_ticker:
             # Sadece son 6 ayı görselleştirelim (ama hesaplama 2 yıllık veriden yapılsın)
             plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna(how='all')
             
-           # --- VERİ HAZIRLIĞI VE İSİM DEĞİŞİKLİĞİ ---
-            # Sadece son 6 ayı görselleştirelim (ama hesaplama 2 yıllık veriden yapılsın)
-            plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna()
+# --- HİSSE DETAY ANALİZİ (GÜNCEL, HATASIZ VE YEŞİL) ---
+# Bu blok dosyanın en sonunda olmalı ve en soldan başlamalıdır.
 
-            if not plot_df.empty:
-                # 1. "Close" sütununu "Kapanış" olarak yeniden adlandır
-                plot_df = plot_df.rename(columns={'Close': 'Kapanış'})
-                
-                # 2. Altair için veriyi hazırlayalım (Tarih index'ten sütuna alınır)
-                plot_df = plot_df.reset_index()
-                
-                # Veriyi "uzun" formata çevir (Altair'in renkleri ayırması için gerekli)
-                plot_df_long = plot_df.melt(id_vars=['Date'], 
-                                            value_vars=['Kapanış', 'SMA50', 'SMA200'],
-                                            var_name='Gösterge', 
-                                            value_name='Fiyat')
-
-         # --- HİSSE DETAY ANALİZİ (KAPANIŞ YEŞİL VE HATASIZ) ---
 st.markdown("---")
 st.subheader("📈 Hisse Detay Analizi")
 
-# Hisse Seçimi
+# Hisse Seçimi (Kullanıcı etkileşimi)
 selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
 
 if selected_ticker:
@@ -219,37 +204,37 @@ if selected_ticker:
         detail_data = hisse_obj.history(period="2y")
         
         if not detail_data.empty:
-            # Teknik Göstergeler
+            # Teknik Göstergeler (SMA50 ve SMA200)
             detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
             detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
             
-            # Son 6 ayı filtrele ve sütun ismini değiştir
+            # Son 6 aylık veriyi al ve sütun ismini değiştir
             plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna()
             plot_df = plot_df.rename(columns={'Close': 'Kapanış'})
             
-            # Altair için veriyi hazırla (Reset index ve Melt)
+            # Altair için veriyi "uzun" (long) formata çeviriyoruz
             plot_df = plot_df.reset_index()
             plot_df_long = plot_df.melt(id_vars=['Date'], 
                                         value_vars=['Kapanış', 'SMA50', 'SMA200'],
                                         var_name='Gösterge', 
                                         value_name='Fiyat')
 
-            # Altair Grafiği (Yeşil Kapanış Çizgisi)
+            # Altair Grafiği (Kapanış Çizgisi YEŞİL)
             chart = alt.Chart(plot_df_long).mark_line().encode(
                 x=alt.X('Date:T', title='Tarih'),
                 y=alt.Y('Fiyat:Q', title='Fiyat (TL)', scale=alt.Scale(zero=False)),
                 color=alt.Color('Gösterge:N',
                                 scale={'domain': ['Kapanış', 'SMA50', 'SMA200'],
-                                       'range': ['green', '#FFA500', '#FF4500']}, # Kapanış YEŞİL
+                                       'range': ['green', '#FFA500', '#FF4500']}, # Kapanış YEŞİL yapıldı
                                 legend=alt.Legend(title="Göstergeler")),
                 tooltip=['Date', 'Gösterge', 'Fiyat']
-            ).properties(height=400).interactive()
+            ).properties(height=450).interactive()
 
             st.altair_chart(chart, use_container_width=True)
             
         else:
-            st.error("Seçilen hisse için veri bulunamadı.")
+            st.error("Seçilen hisse için geçmiş veri bulunamadı.")
 
     except Exception as e:
-        # İşte eksik olan 'except' bloğu burasıydı, hatayı bu satır çözer:
+        # İşte hata veren eksik kısım burasıydı. try'ın mutlaka bir except'i olmalı!
         st.error(f"Grafik yüklenirken bir sorun oluştu: {e}")

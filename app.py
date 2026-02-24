@@ -165,34 +165,35 @@ if st.sidebar.button("Analizi Başlat / Güncelle"):
 else:
     st.info("Lütfen sol paneldeki 'Analizi Başlat' butonuna tıklayarak işlemi başlatın. 500+ hissenin taranması birkaç dakika sürebilir.")
     # Tablonun hemen altına eklenecek grafik kodu
+# --- HİSSE DETAY ANALİZİ (BAŞTAN AŞAĞI YENİLENDİ) ---
 st.markdown("---")
+# Başlığı sadece burada bir kez yazıyoruz
 st.subheader("📈 Hisse Detay Analizi")
-# --- HİSSE DETAY ANALİZİ MODÜLÜ (GÜNCEL VE HATASIZ) ---
-st.markdown("---")
-st.subheader("📈 Hisse Detay Analizi")
-selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list)
+
+# Hisse Seçimi
+selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
 
 if selected_ticker:
     try:
-        # yf.download yerine Ticker().history kullanmak MultiIndex hatasını önler
+        # SMA200 için en az 1 yıllık (1y) veya 2 yıllık (2y) veri çekmeliyiz
         hisse_obj = yf.Ticker(selected_ticker)
-        detail_data = hisse_obj.history(period="6mo")
+        detail_data = hisse_obj.history(period="2y") # Süreyi 2 yıla çıkardık
         
         if not detail_data.empty:
-            # SMA (Hareketli Ortalama) Hesaplamaları
+            # Teknik Göstergeler
             detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
             detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
             
-            # Sadece çizilecek sütunları seç ve boş (NaN) değerleri temizle
-            plot_df = detail_data[['Close', 'SMA50', 'SMA200']].dropna()
+            # Sadece son 6 ayı görselleştirelim (ama hesaplama 2 yıllık veriden yapılsın)
+            plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna(how='all')
             
             if not plot_df.empty:
                 st.line_chart(plot_df)
-                st.caption(f"{selected_ticker} için son 6 aylık Kapanış, SMA50 ve SMA200 grafiği.")
+                st.info(f"**{selected_ticker}** için Kapanış Fiyatı (Mavi), SMA50 (Turuncu) ve SMA200 (Kırmızı) gösteriliyor.")
             else:
-                st.warning("Grafik oluşturmak için yeterli veri (SMA için en az 200 gün) bulunamadı.")
+                st.warning("Bu hisse için yeterli işlem geçmişi (SMA200 için 200 gün) bulunamadı.")
         else:
-            st.error("Hisse verileri çekilemedi.")
+            st.error("Veri çekilemedi. Lütfen daha sonra tekrar deneyin.")
             
     except Exception as e:
-        st.error(f"Grafik oluşturulurken bir hata oluştu: {e}")
+        st.error(f"Grafik yüklenirken bir teknik hata oluştu: {e}")

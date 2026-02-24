@@ -164,3 +164,16 @@ if st.sidebar.button("Analizi Başlat / Güncelle"):
 
 else:
     st.info("Lütfen sol paneldeki 'Analizi Başlat' butonuna tıklayarak işlemi başlatın. 500+ hissenin taranması birkaç dakika sürebilir.")
+    # Tablonun hemen altına eklenecek grafik kodu
+st.markdown("---")
+st.subheader("📈 Hisse Detay Analizi")
+selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list)
+
+if selected_ticker:
+    detail_data = yf.download(selected_ticker, period="6mo", interval="1d", progress=False)
+    detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
+    detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
+    
+    # Grafik çizimi
+    st.line_chart(detail_data[['Close', 'SMA50', 'SMA200']])
+    st.write(f"{selected_ticker} için son 6 aylık fiyat ve ortalama grafiği.")

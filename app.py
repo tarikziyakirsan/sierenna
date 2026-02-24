@@ -188,7 +188,7 @@ if selected_ticker:
             # Sadece son 6 ayı görselleştirelim (ama hesaplama 2 yıllık veriden yapılsın)
             plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna(how='all')
             
-# --- HİSSE DETAY ANALİZİ (EN SADE VE STABİL SÜRÜM) ---
+# --- HİSSE DETAY ANALİZİ (HATASIZ VE STABİL SÜRÜM) ---
 st.markdown("---")
 st.subheader("📈 Hisse Detay Analizi")
 
@@ -206,17 +206,16 @@ if selected_ticker:
             detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
             detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
             
-            # Sadece son 6 ayı görselleştir (SMA'lar için dropna kullanıyoruz)
-            # Sütun isimleri standart: Close, SMA50, SMA200
+            # Son 6 ayı filtrele ve boşlukları temizle
             plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna()
             
-            # Standart Streamlit Grafiği (Hızlı ve Hatasız)
+            # Standart Grafik (Sorunsuz çalışır)
             st.line_chart(plot_df)
-            st.info(f"{selected_ticker} hissesinin son 6 aylık fiyat ve hareketli ortalama grafiği.")
+            st.info(f"{selected_ticker} hissesinin son 6 aylık fiyat (Close) ve hareketli ortalama (SMA) grafiği.")
             
         else:
             st.error("Seçilen hisse için veri bulunamadı.")
 
     except Exception as e:
-        # SyntaxError hatasını engelleyen kritik blok:
-        st.error(f"Grafik yüklenirken bir sorun oluştu: {e}")}")
+        # Hatalı olan parantez burada düzeltildi:
+        st.error(f"Grafik yüklenirken bir sorun oluştu: {e}")            

@@ -2,15 +2,14 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
-import altair as alt
 
-# Sayfa Yapılandırması
+# 1. Sayfa Yapılandırması
 st.set_page_config(page_title="BIST Tüm Evren Analizi", layout="wide")
 
 st.title("📊 BIST Tüm Şirketler Master Analiz Paneli")
-st.write("Teknik Momentum, Temel Değerleme ve 6 Aylık Performans Denetimi")
+st.write("Teknik Momentum, Temel Değerleme ve Performans Denetimi")
 
-# 1. TÜM BİST LİSTESİ (Benzersiz hale getirilmiş ~560 Hisse)
+# 2. BİST LİSTESİ (~560 Hisse)
 bist_full_list = sorted(list(set([
     "A1CAP.IS", "ACSEL.IS", "ADEZ.IS", "ADESE.IS", "AEFES.IS", "AFYON.IS", "AGESA.IS", "AGHOL.IS", "AGROT.IS", "AKBNK.IS",
     "AKCNS.IS", "AKENR.IS", "AKFGY.IS", "AKFYE.IS", "AKGRT.IS", "AKMGY.IS", "AKSA.IS", "AKSEN.IS", "ALARK.IS", "ALBRK.IS",
@@ -55,64 +54,59 @@ bist_full_list = sorted(list(set([
     "YKBNK.IS", "YONGA.IS", "YUNSA.IS", "YYLGD.IS", "ZEDUR.IS", "ZOREN.IS", "ZRGYO.IS"
 ])))
 
+# 3. Veri Çekme Fonksiyonu
 @st.cache_data(ttl=3600)
 def fetch_master_data(tickers):
-    # 10 aylık veri çekiyoruz (6 aylık performans ve SMA hesaplamaları için)
     data = yf.download(tickers, period="10mo", interval="1d", group_by='ticker', progress=False)
     return data
 
-# Yan Panel - Filtreleme
+# 4. Sidebar Filtreleri
 st.sidebar.header("🔍 Analiz Ayarları")
 score_threshold = st.sidebar.slider("Minimum Skor Eşiği", 0, 100, 50)
 st.sidebar.info(f"Toplam {len(bist_full_list)} hisse taranacak.")
 
+# 5. Ana Analiz Döngüsü
 if st.sidebar.button("Analizi Başlat / Güncelle"):
     raw_data = fetch_master_data(bist_full_list)
     results = []
     
-    # İlerleme çubuğu
     progress_bar = st.progress(0)
     status_text = st.empty()
-    
     total_tickers = len(bist_full_list)
     
     for i, ticker in enumerate(bist_full_list):
         try:
-            # Durum güncelleme
             status_text.text(f"Analiz ediliyor: {ticker} ({i+1}/{total_tickers})")
             
             df = raw_data[ticker].copy().dropna()
             if len(df) < 130: continue
 
-            # --- TEKNİK & MOMENTUM ---
+            # Teknik & Momentum
             cp = df['Close'].iloc[-1]
             prev_p = df['Close'].iloc[-2]
-            
             day_chg = ((cp - prev_p) / prev_p) * 100
             ret_1w = ((cp - df['Close'].iloc[-6]) / df['Close'].iloc[-6]) * 100
             ret_1m = ((cp - df['Close'].iloc[-22]) / df['Close'].iloc[-22]) * 100
             ret_6m = ((cp - df['Close'].iloc[-127]) / df['Close'].iloc[-127]) * 100
             
-            # RSI & SMA
             df['RSI'] = ta.rsi(df['Close'], length=14)
             rsi = df['RSI'].iloc[-1]
             sma50 = ta.sma(df['Close'], length=50).iloc[-1]
             
-            # --- TEMEL VERİLER ---
-            # Not: Fundamental verileri çekmek hızı yavaşlatabilir.
+            # Temel Veriler
             info = yf.Ticker(ticker).info
             sektor = info.get('sector', 'Diğer')
             fk = info.get('trailingPE', None)
             pddd = info.get('priceToBook', None)
 
-            # --- SKORLAMA (0-100) ---
+            # Skorlama
             skor = 0
-            if 30 < rsi < 45: skor += 20       # Alım bölgesi RSI
-            if cp > sma50: skor += 20         # Trend yönü olumlu
-            if fk and 0 < fk < 15: skor += 30  # Makul F/K
-            if ret_1m > 0: skor += 30         # Momentum var
+            if 30 < rsi < 45: skor += 20
+            if cp > sma50: skor += 20
+            if fk and 0 < fk < 15: skor += 30
+            if ret_1m > 0: skor += 30
 
-            # --- SİNYAL BELİRLEME ---
+            # Sinyal
             if day_chg >= 9.5: sinyal = "🚀 TAVAN"
             elif rsi < 30: sinyal = "💎 GÜÇLÜ AL"
             elif rsi > 70: sinyal = "🔥 GÜÇLÜ SAT"
@@ -121,101 +115,49 @@ if st.sidebar.button("Analizi Başlat / Güncelle"):
             else: sinyal = "⚠️ RİSKLİ / SAT"
 
             results.append({
-                "Sektör": sektor, 
-                "Hisse": ticker.replace(".IS", ""), 
-                "Fiyat": round(cp, 2),
-                "Günlük %": round(day_chg, 2), 
-                "1H %": round(ret_1w, 1), 
-                "1A %": round(ret_1m, 1),
-                "6A %": round(ret_6m, 1), 
-                "RSI": round(rsi, 1), 
-                "F/K": round(fk, 1) if fk else "N/A",
-                "PD/DD": round(pddd, 1) if pddd else "N/A",
-                "Skor": skor, 
-                "Sinyal": sinyal
+                "Sektör": sektor, "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
+                "Günlük %": round(day_chg, 2), "1H %": round(ret_1w, 1), "1A %": round(ret_1m, 1),
+                "6A %": round(ret_6m, 1), "RSI": round(rsi, 1), "F/K": round(fk, 1) if fk else "N/A",
+                "PD/DD": round(pddd, 1) if pddd else "N/A", "Skor": skor, "Sinyal": sinyal
             })
-            
-            # İlerleme çubuğunu güncelle
             progress_bar.progress((i + 1) / total_tickers)
-            
-        except: 
+        except:
             continue
 
-    # Analiz tamamlandı mesajı
     status_text.text("Analiz Tamamlandı!")
-    
-    # Veriyi DataFrame'e dök
     res_df = pd.DataFrame(results)
-    
-    # Filtreleme: Kullanıcının belirlediği skorun üzerindekileri getir
     final_df = res_df[res_df['Skor'] >= score_threshold].sort_values(by=["Sektör", "Skor"], ascending=[True, False])
     
-    # Görselleştirme
-    st.success(f"Analiz bitti. Şartları sağlayan {len(final_df)} hisse bulundu.")
+    st.success(f"Şartları sağlayan {len(final_df)} hisse bulundu.")
+    st.dataframe(final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), use_container_width=True)
     
-    # Renkli Tablo
-    st.dataframe(
-        final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), 
-        use_container_width=True
-    )
-    
-    # Excel/CSV İndirme Butonu
     csv = final_df.to_csv(index=False).encode('utf-8')
     st.download_button("Sonuçları İndir (CSV)", csv, "bist_analiz_sonuclari.csv", "text/csv")
-
 else:
-    st.info("Lütfen sol paneldeki 'Analizi Başlat' butonuna tıklayarak işlemi başlatın. 500+ hissenin taranması birkaç dakika sürebilir.")
-    # Tablonun hemen altına eklenecek grafik kodu
-# --- HİSSE DETAY ANALİZİ (BAŞTAN AŞAĞI YENİLENDİ) ---
-st.markdown("---")
-# Başlığı sadece burada bir kez yazıyoruz
-st.subheader("📈 Hisse Detay Analizi")
+    st.info("Sol paneldeki 'Analizi Başlat' butonuna tıklayarak işlemi başlatın.")
 
-# Hisse Seçimi
+# 6. Hisse Detay Analizi (Sayfanın En Altında)
+st.markdown("---")
+st.subheader("📈 Hisse Detay Analizi")
 selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
 
 if selected_ticker:
     try:
-        # SMA200 için en az 1 yıllık (1y) veya 2 yıllık (2y) veri çekmeliyiz
-        hisse_obj = yf.Ticker(selected_ticker)
-        detail_data = hisse_obj.history(period="2y") # Süreyi 2 yıla çıkardık
-        
-        if not detail_data.empty:
-            # Teknik Göstergeler
-            detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
-            detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
-            
-            # Sadece son 6 ayı görselleştirelim (ama hesaplama 2 yıllık veriden yapılsın)
-            plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna(how='all')
-            
-# --- HİSSE DETAY ANALİZİ (HATASIZ VE STABİL SÜRÜM) ---
-st.markdown("---")
-st.subheader("📈 Hisse Detay Analizi")
-
-# Hisse Seçimi
-selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
-
-if selected_ticker:
-    try:
-        # Veri çekme (SMA200 için 2 yıllık veri çekiyoruz)
         hisse_obj = yf.Ticker(selected_ticker)
         detail_data = hisse_obj.history(period="2y")
         
         if not detail_data.empty:
-            # Teknik Göstergeler (SMA50 ve SMA200)
             detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
             detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
             
-            # Son 6 ayı filtrele ve boşlukları temizle
             plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna()
             
-            # Standart Grafik (Sorunsuz çalışır)
-            st.line_chart(plot_df)
-            st.info(f"{selected_ticker} hissesinin son 6 aylık fiyat (Close) ve hareketli ortalama (SMA) grafiği.")
-            
+            if not plot_df.empty:
+                st.line_chart(plot_df)
+                st.info(f"{selected_ticker} hissesinin son 6 aylık fiyat ve hareketli ortalama grafiği.")
+            else:
+                st.warning("SMA200 hesaplamak için yeterli veri yok.")
         else:
-            st.error("Seçilen hisse için veri bulunamadı.")
-
+            st.error("Veri çekilemedi.")
     except Exception as e:
-        # Hatalı olan parantez burada düzeltildi:
-        st.error(f"Grafik yüklenirken bir sorun oluştu: {e}")            
+        st.error(f"Grafik yüklenirken hata oluştu: {e}")

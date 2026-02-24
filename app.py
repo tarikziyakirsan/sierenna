@@ -167,13 +167,32 @@ else:
     # Tablonun hemen altına eklenecek grafik kodu
 st.markdown("---")
 st.subheader("📈 Hisse Detay Analizi")
+# --- HİSSE DETAY ANALİZİ MODÜLÜ (GÜNCEL VE HATASIZ) ---
+st.markdown("---")
+st.subheader("📈 Hisse Detay Analizi")
 selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list)
 
 if selected_ticker:
-    detail_data = yf.download(selected_ticker, period="6mo", interval="1d", progress=False)
-    detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
-    detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
-    
-    # Grafik çizimi
-    st.line_chart(detail_data[['Close', 'SMA50', 'SMA200']])
-    st.write(f"{selected_ticker} için son 6 aylık fiyat ve ortalama grafiği.")
+    try:
+        # yf.download yerine Ticker().history kullanmak MultiIndex hatasını önler
+        hisse_obj = yf.Ticker(selected_ticker)
+        detail_data = hisse_obj.history(period="6mo")
+        
+        if not detail_data.empty:
+            # SMA (Hareketli Ortalama) Hesaplamaları
+            detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
+            detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
+            
+            # Sadece çizilecek sütunları seç ve boş (NaN) değerleri temizle
+            plot_df = detail_data[['Close', 'SMA50', 'SMA200']].dropna()
+            
+            if not plot_df.empty:
+                st.line_chart(plot_df)
+                st.caption(f"{selected_ticker} için son 6 aylık Kapanış, SMA50 ve SMA200 grafiği.")
+            else:
+                st.warning("Grafik oluşturmak için yeterli veri (SMA için en az 200 gün) bulunamadı.")
+        else:
+            st.error("Hisse verileri çekilemedi.")
+            
+    except Exception as e:
+        st.error(f"Grafik oluşturulurken bir hata oluştu: {e}")

@@ -205,23 +205,56 @@ if selected_ticker:
                                             var_name='Gösterge', 
                                             value_name='Fiyat')
 
-                # --- ALTAIR İLE ÖZEL RENKLİ GRAFİK ÇİZİMİ ---
+            # --- HİSSE DETAY ANALİZİ (GÜNCEL VE HATASIZ BLOK) ---
+st.markdown("---")
+st.subheader("📈 Hisse Detay Analizi")
+
+# Hisse Seçimi
+selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
+
+if selected_ticker:
+    try:
+        # Veri çekme
+        hisse_obj = yf.Ticker(selected_ticker)
+        detail_data = hisse_obj.history(period="2y") 
+        
+        if not detail_data.empty:
+            # Teknik Göstergeler
+            detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
+            detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
+            
+            # Son 6 aylık veriyi hazırla
+            plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna()
+            
+            if not plot_df.empty:
+                # Sütun ismini değiştir
+                plot_df = plot_df.rename(columns={'Close': 'Kapanış'})
+                
+                # Altair için veriyi düzelt (Reset index ve Melt)
+                plot_df = plot_df.reset_index()
+                plot_df_long = plot_df.melt(id_vars=['Date'], 
+                                            value_vars=['Kapanış', 'SMA50', 'SMA200'],
+                                            var_name='Gösterge', 
+                                            value_name='Fiyat')
+
+                # Altair Grafiği (Yeşil Kapanış Çizgisiyle)
                 chart = alt.Chart(plot_df_long).mark_line().encode(
-                    x=alt.X('Date:T', axis=alt.Axis(title='Tarih', format='%Y-%m-%d')),
-                    y=alt.Y('Fiyat:Q', title='Fiyat (TL)'),
-                    # RENK AYARI BURADA YAPILIYOR:
+                    x=alt.X('Date:T', title='Tarih'),
+                    y=alt.Y('Fiyat:Q', title='Fiyat (TL)', scale=alt.Scale(zero=False)),
                     color=alt.Color('Gösterge:N',
                                     scale={'domain': ['Kapanış', 'SMA50', 'SMA200'],
-                                           'range': ['green', '#FFA500', '#FF4500']}, # Kapanış=Yeşil, Diğerleri=Turuncu/Kırmızı tonları
+                                           'range': ['green', '#FFA500', '#FF4500']},
                                     legend=alt.Legend(title="Göstergeler")),
-                    tooltip=[alt.Tooltip('Date:T', title='Tarih', format = '%Y-%m-%d'),
-                             alt.Tooltip('Gösterge:N'),
-                             alt.Tooltip('Fiyat:Q', format='.2f')]
-                ).properties(
-                    title=f'{selected_ticker} Detaylı Fiyat Analizi'
-                ).interactive() # Grafiği yakınlaştırıp uzaklaştırmayı sağlar
+                    tooltip=['Date', 'Gösterge', 'Fiyat']
+                ).interactive()
 
                 st.altair_chart(chart, use_container_width=True)
-                # st.info yazısını kaldırdık çünkü artık grafik lejantında renkler net görünüyor.
             else:
-                st.warning("Bu hisse için yeterli işlem geçmişi (SMA200 için 200 gün) bulunamadı ve grafik çizilemedi.")
+                st.warning("Bu hisse için yeterli işlem geçmişi (SMA200 için 200 gün) bulunamadı.")
+        
+        else:
+            st.error("Veri çekilemedi.")
+
+    except Exception as e:
+        # İŞTE EKSİK OLAN VE HATAYA SEBEP OLAN BLOK BURASIYDI:
+        st.error(f"Grafik oluşturulurken bir hata oluştu: {e}")

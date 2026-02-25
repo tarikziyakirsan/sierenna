@@ -3,13 +3,32 @@ import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
 
-# --- SAYFA AYARLARI ---
-st.set_page_config(page_title="BIST Master Terminal", layout="wide")
+# --- 1. SAYFA AYARLARI VE SIDEBAR'I TAMAMEN GİZLEME ---
+st.set_page_config(page_title="BIST Master Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
 
-st.title("📊 BIST Master Analiz Terminali")
-st.info("💡 **Vibe Check:** Bu uygulama bilgilendirme amaçlıdır. Analizler yatırım tavsiyesi değildir, tüm risk kullanıcıya aittir.")
+# Sidebar'ı ve açılır kapanır oku tamamen ortadan kaldıran CSS
+st.markdown("""
+    <style>
+        [data-testid="stSidebar"], [data-testid="stSidebarNav"], .css-1dp56ee, .css-yk4q2l {
+            display: none !important;
+        }
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+        .stApp { margin-left: 0px; }
+    </style>
+""", unsafe_allow_html=True)
 
-# --- 1. HİSSE LİSTESİ (448 Hisse) ---
+# --- 2. BAŞLIK VE ESKİ SARI UYARI YAZISI ---
+st.title("Bist Master Analiz Terminali")
+
+# İstediğin sarı fontlu yasal uyarı metni
+st.warning("""
+**YASAL UYARI:** Bu uygulama bilgilendirme amaçlıdır. Burada yer alan veriler, analizler ve skorlar kesinlikle yatırım tavsiyesi değildir. 
+Piyasa verileri gecikmeli olabilir ve analiz sonuçları hata payı içerebilir. Yapılan tüm işlemlerin riski ve sorumluluğu tamamen kullanıcıya aittir.
+""")
+
+# --- 3. HİSSE LİSTESİ ---
 bist_full_list = sorted(list(set([
     "A1CAP.IS", "ACSEL.IS", "ADEZ.IS", "ADESE.IS", "AEFES.IS", "AFYON.IS", "AGESA.IS", "AGHOL.IS", "AGROT.IS", "AHGAZ.IS",
     "AKBNK.IS", "AKCNS.IS", "AKENR.IS", "AKFGY.IS", "AKFYE.IS", "AKGRT.IS", "AKMGY.IS", "AKSA.IS", "AKSEN.IS", "ALARK.IS",
@@ -22,7 +41,7 @@ bist_full_list = sorted(list(set([
     "BTCIM.IS", "BUCIM.IS", "BURCE.IS", "BURVA.IS", "BVSAN.IS", "BYDNR.IS", "CANTE.IS", "CATES.IS", "CCOLA.IS", "CELHA.IS",
     "CEMAS.IS", "CEMTS.IS", "CEOEM.IS", "CIMSA.IS", "CLEBI.IS", "CONSE.IS", "CVKMD.IS", "CWENE.IS", "DAGHL.IS", "DAGI.IS",
     "DAPGM.IS", "DARDL.IS", "DENGE.IS", "DERIM.IS", "DERHL.IS", "DESA.IS", "DESPC.IS", "DGATE.IS", "DGGYO.IS", "DGNMO.IS",
-    "DIRIT.IS", "DITAS.IS", "DMSAS.IS", "DNISI.IS", "DOAS.IS", "DOCO.IS", "DOGUB.IS", "DOGUB.IS", "DOHOL.IS", "DOKTA.IS",
+    "DIRIT.IS", "DITAS.IS", "DMSAS.IS", "DNISI.IS", "DOAS.IS", "DOCO.IS", "DOGUB.IS", "DOHOL.IS", "DOKTA.IS",
     "DURDO.IS", "DYOBY.IS", "DZGYO.IS", "EBEBK.IS", "ECILC.IS", "ECZYT.IS", "EDATA.IS", "EDIP.IS", "EGEEN.IS", "EGGUB.IS",
     "EGPRO.IS", "EGSER.IS", "EKGYO.IS", "EKOS.IS", "EKSUN.IS", "ELITE.IS", "EMKEL.IS", "ENERY.IS", "ENJSA.IS", "ENKAI.IS",
     "ENSRI.IS", "EPLAS.IS", "ERBOS.IS", "EREGL.IS", "ERSU.IS", "ESCOM.IS", "ESEN.IS", "ETILR.IS", "EUPWR.IS", "EUREN.IS",
@@ -62,24 +81,19 @@ bist_full_list = sorted(list(set([
 def fetch_master_data(tickers):
     return yf.download(tickers, period="10mo", interval="1d", group_by='ticker', progress=False)
 
-# --- SIDEBAR (Sadece Logo/Bilgi için) ---
-st.sidebar.title("🎮 Terminal Sidebar")
-st.sidebar.info(f"📍 Aktif Hisse Sayısı: {len(bist_full_list)}")
-
-# --- SEKMELER ---
+# --- 4. SEKMELER ---
 tab1, tab2, tab3 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Haberler & Detay"])
 
 # --- TAB 1: PAZAR ANALİZİ ---
 with tab1:
-    st.subheader("🔥 Global BIST Taraması")
+    # "Global" kelimesi kaldırıldı
+    st.subheader("🔥 BIST Taraması")
     
-    # MASTER AYARLAR ARTIK BURADA (Butonun Hemen Altında)
+    # Skor eşiği ve buton (vibe filter yazısı kaldırıldı)
+    score_threshold = st.slider("🎯 Minimum skor eşiği", 0, 100, 50)
+    
     if st.button("🔄 Analizi Başlat / Güncelle"):
-        # Skor eşiğini buton basıldıktan hemen sonra alıyoruz
         st.session_state.last_run = True
-        
-    score_threshold = st.slider("🎯 Minimum Skor Eşiği (Vibe Filter)", 0, 100, 50)
-    st.caption("Not: Skoru değiştirdiğinizde listeyi güncellemek için tekrar butona basın.")
 
     if 'last_run' in st.session_state:
         raw_data = fetch_master_data(bist_full_list)
@@ -100,9 +114,8 @@ with tab1:
                 rsi = df['RSI'].iloc[-1]
                 sma50 = ta.sma(df['Close'], length=50).iloc[-1]
                 
-                # Temel Veriler (Hızlı mod)
+                # Sektör bilgisi kaldırıldı, sadece temel finansal veri
                 info = yf.Ticker(ticker).info
-                sektor = info.get('sector', 'Diğer')
                 fk = info.get('trailingPE', None)
 
                 skor = 0
@@ -112,7 +125,7 @@ with tab1:
                 if ret_1m > 0: skor += 30
 
                 results.append({
-                    "Sektör": sektor, "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
+                    "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
                     "Günlük %": round(day_chg, 2), "1A %": round(ret_1m, 1), "RSI": round(rsi, 1),
                     "F/K": round(fk, 1) if fk else "N/A", "Skor": skor
                 })
@@ -127,7 +140,7 @@ with tab1:
 
 # --- TAB 2: PORTFÖYÜM ---
 with tab2:
-    st.subheader("💼 Portföy Vibe Check")
+    st.subheader("💼 Portföy Durumu")
     if 'portfolio_data' not in st.session_state:
         st.session_state.portfolio_data = pd.DataFrame([{"Hisse Kodu": "THYAO", "Adet": 1, "Maliyet": 300.0}])
 
@@ -152,38 +165,30 @@ with tab2:
             st.metric("Net Durum", f"{total:,.2f} TL", delta=f"{total:,.2f} TL")
             if total > 0: st.balloons()
 
-# --- TAB 3: HABERLER ---
+# --- TAB 3: HABERLER & GRAFİK ---
 with tab3:
-    st.subheader("📰 Hisse Detay & News")
-    selected_h = st.selectbox("Hisse Seçin:", bist_full_list)
-    if selected_h:
-        h_obj = yf.Ticker(selected_h)
-        st.line_chart(h_obj.history(period="6mo")['Close'])
-        news = h_obj.news
-        for item in news[:3]:
-            st.write(f"🔗 **[{item['title']}]({item['link']})**")
-# 6. Hisse Detay Analizi (Sayfanın En Altında)
-st.markdown("---")
-st.subheader("📈 Hisse Detay Analizi")
-selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
+    st.subheader("📈 Hisse Detay Analizi")
+    selected_ticker = st.selectbox("Hisse Seçin:", bist_full_list, key="detail_select")
 
-if selected_ticker:
-    try:
-        hisse_obj = yf.Ticker(selected_ticker)
-        detail_data = hisse_obj.history(period="2y")
-        
-        if not detail_data.empty:
-            detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
-            detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
-            
-            plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna()
-            
-            if not plot_df.empty:
+    if selected_ticker:
+        try:
+            hisse_obj = yf.Ticker(selected_ticker)
+            # Grafik
+            detail_data = hisse_obj.history(period="2y")
+            if not detail_data.empty:
+                detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
+                detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
+                plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna()
                 st.line_chart(plot_df)
-                st.info(f"{selected_ticker} hissesinin son 6 aylık fiyat ve hareketli ortalama grafiği.")
-            else:
-                st.warning("SMA200 hesaplamak için yeterli veri yok.")
-        else:
-            st.error("Veri çekilemedi.")
-    except Exception as e:
-        st.error(f"Grafik yüklenirken hata oluştu: {e}")
+            
+            # Haberler
+            st.markdown("---")
+            st.write("📰 **Son Haberler**")
+            news = hisse_obj.news
+            for item in news[:3]:
+                st.write(f"🔗 **[{item['title']}]({item['link']})**")
+        except Exception as e:
+            st.error(f"Veri yüklenirken hata: {e}")
+
+st.markdown("---")
+st.caption("BIST Master Analiz Terminali | Veriler teknik momentum ve temel analiz çarpanları ile hesaplanır.")

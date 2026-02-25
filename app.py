@@ -2,11 +2,12 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
+import feedparser  # Google News RSS için gerekli
+from urllib.parse import quote
 
 # --- 1. SAYFA AYARLARI VE SIDEBAR'I TAMAMEN GİZLEME ---
-st.set_page_config(page_title="BIST Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Bist Master Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
 
-# Sidebar'ı ve açılır kapanır oku tamamen ortadan kaldıran CSS
 st.markdown("""
     <style>
         [data-testid="stSidebar"], [data-testid="stSidebarNav"], .css-1dp56ee, .css-yk4q2l {
@@ -19,11 +20,13 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. BAŞLIK VE YASAL UYARI ---
-st.title("📊 BIST Analiz Paneli")
-st.write("Teknik Momentum, Temel Değerleme ve Performans Denetimi")
+# --- 2. ANA BAŞLIK VE SARI UYARI METNİ ---
+st.title("📊 Bist Master Analiz Terminali")
 
-st.warning("⚠️ **Yasal Uyarı:** Bu uygulama bilgilendirme amaçlıdır. Burada yer alan veriler, analizler ve skorlar kesinlikle **yatırım tavsiyesi değildir.** Piyasa verileri gecikmeli olabilir ve analiz sonuçları hata payı içerebilir. Yapılan tüm işlemlerin riski ve sorumluluğu tamamen kullanıcıya aittir.")
+st.warning("""
+**YASAL UYARI:** Bu uygulama bilgilendirme amaçlıdır. Burada yer alan veriler, analizler ve skorlar kesinlikle yatırım tavsiyesi değildir. 
+Piyasa verileri gecikmeli olabilir ve analiz sonuçları hata payı içerebilir. Yapılan tüm işlemlerin riski ve sorumluluğu tamamen kullanıcıya aittir.
+""")
 
 st.markdown("---")
 
@@ -40,40 +43,40 @@ bist_full_list = sorted(list(set([
     "BTCIM.IS", "BUCIM.IS", "BURCE.IS", "BURVA.IS", "BVSAN.IS", "BYDNR.IS", "CANTE.IS", "CATES.IS", "CCOLA.IS", "CELHA.IS",
     "CEMAS.IS", "CEMTS.IS", "CEOEM.IS", "CIMSA.IS", "CLEBI.IS", "CONSE.IS", "CVKMD.IS", "CWENE.IS", "DAGHL.IS", "DAGI.IS",
     "DAPGM.IS", "DARDL.IS", "DENGE.IS", "DERIM.IS", "DERHL.IS", "DESA.IS", "DESPC.IS", "DGATE.IS", "DGGYO.IS", "DGNMO.IS",
-    "DIRIT.IS", "DITAS.IS", "DMSAS.IS", "DNISI.IS", "DOAS.IS", "DOCO.IS", "DOGUB.IS", "DOHOL.IS", "DOKTA.IS", "DURDO.IS",
-    "DYOBY.IS", "DZGYO.IS", "EBEBK.IS", "ECILC.IS", "ECZYT.IS", "EDATA.IS", "EDIP.IS", "EGEEN.IS", "EGGUB.IS", "EGPRO.IS",
-    "EGSER.IS", "EKGYO.IS", "EKOS.IS", "EKSUN.IS", "ELITE.IS", "EMKEL.IS", "ENERY.IS", "ENJSA.IS", "ENKAI.IS", "ENSRI.IS",
-    "EPLAS.IS", "ERBOS.IS", "EREGL.IS", "ERSU.IS", "ESCOM.IS", "ESEN.IS", "ETILR.IS", "EUPWR.IS", "EUREN.IS", "EYGYO.IS",
-    "FENER.IS", "FLAP.IS", "FMIZP.IS", "FONET.IS", "FORMT.IS", "FORTE.IS", "FRIGO.IS", "FROTO.IS", "FZLGY.IS", "GARAN.IS",
-    "GEDIK.IS", "GEDZA.IS", "GENIL.IS", "GENTS.IS", "GEREL.IS", "GESAN.IS", "GIPTA.IS", "GLBMD.IS", "GLRYH.IS", "GLYHO.IS",
-    "GOKNR.IS", "GOLTS.IS", "GOODY.IS", "GOZDE.IS", "GSDDE.IS", "GSDHO.IS", "GSRAY.IS", "GUBRF.IS", "GWIND.IS", "GZNMI.IS",
-    "HALKB.IS", "HATEK.IS", "HATSN.IS", "HEDEF.IS", "HEKTS.IS", "HKTM.IS", "HLGYO.IS", "HRKET.IS", "HTTBT.IS", "HUNER.IS",
-    "HURGZ.IS", "ICBCT.IS", "IDGYO.IS", "IEYHO.IS", "IHAAS.IS", "IHEVA.IS", "IHGZT.IS", "IHLAS.IS", "IHLGM.IS", "IKLGT.IS",
-    "IMASM.IS", "INDES.IS", "INFO.IS", "INGRM.IS", "INVEO.IS", "INVES.IS", "IPEKE.IS", "ISATR.IS", "ISBTR.IS", "ISCTR.IS",
-    "ISFIN.IS", "ISGSY.IS", "ISGYO.IS", "ISKPL.IS", "ISMEN.IS", "ISSEN.IS", "ISYAT.IS", "IZENR.IS", "IZMDC.IS", "IZINV.IS",
-    "JANTS.IS", "KAPLM.IS", "KARYE.IS", "KATMR.IS", "KAYSE.IS", "KCAER.IS", "KCHOL.IS", "KENT.IS", "KERVT.IS", "KFEIN.IS",
-    "KGYO.IS", "KIMMR.IS", "KLGYO.IS", "KLMSN.IS", "KLNMA.IS", "KLRHO.IS", "KLSYN.IS", "KMPUR.IS", "KNFRT.IS", "KONKA.IS",
-    "KONTR.IS", "KONYA.IS", "KORDS.IS", "KOZAA.IS", "KOZAL.IS", "KRDMA.IS", "KRDMB.IS", "KRDMD.IS", "KRGYO.IS", "KRONT.IS",
-    "KRPLS.IS", "KRSTL.IS", "KRTEK.IS", "KRVGD.IS", "KTSKR.IS", "KUTPO.IS", "KUYAS.IS", "KZBGY.IS", "KZGYO.IS", "LIDER.IS",
-    "LIDFA.IS", "LINK.IS", "LKMNH.IS", "LOGOS.IS", "LUKSK.IS", "MAALT.IS", "MACKO.IS", "MAGEN.IS", "MAKIM.IS", "MAKTK.IS",
-    "MANAS.IS", "MARBL.IS", "MARTI.IS", "MAVI.IS", "MEDTR.IS", "MEGAP.IS", "MEKAG.IS", "MEPET.IS", "MERCN.IS", "MERKO.IS",
-    "METRO.IS", "METUR.IS", "MHRGY.IS", "MIATK.IS", "MIPAZ.IS", "MNDRS.IS", "MOBTL.IS", "MGROS.IS", "MOGAN.IS", "MPARK.IS",
-    "MRGYO.IS", "MRSHL.IS", "MSGYO.IS", "MTRKS.IS", "MZHLD.IS", "NATEN.IS", "NETAS.IS", "NIBAS.IS", "NTGAZ.IS", "NUGYO.IS",
-    "NUHCM.IS", "OBAMS.IS", "OBASE.IS", "ODAS.IS", "ONCSM.IS", "ORCAY.IS", "ORGE.IS", "ORMA.IS", "OSMEN.IS", "OSTIM.IS",
-    "OTKAR.IS", "OYAKC.IS", "OYAYO.IS", "OYLUM.IS", "OYYAT.IS", "OZGYO.IS", "OZKGY.IS", "OZRDN.IS", "OZSUB.IS", "PAGYO.IS",
-    "PAMEL.IS", "PAPIL.IS", "PARSN.IS", "PASEU.IS", "PATEK.IS", "PCILT.IS", "PEGYO.IS", "PEKGY.IS", "PENTA.IS", "PETKM.IS",
-    "PETUN.IS", "PGSUS.IS", "PINSU.IS", "PKART.IS", "PKENT.IS", "PLTUR.IS", "PNLSN.IS", "PNSUT.IS", "POLHO.IS", "POLTK.IS",
-    "PRKAB.IS", "PRKME.IS", "PRZMA.IS", "PSDTC.IS", "QUAGR.IS", "RALYH.IS", "RAYYS.IS", "REEDR.IS", "RNPOL.IS", "RODRG.IS",
-    "RTALB.IS", "RUBNS.IS", "RYGYO.IS", "RYSAS.IS", "SAFKR.IS", "SAHOL.IS", "SAMAT.IS", "SANEL.IS", "SANFM.IS", "SANKO.IS",
-    "SARKY.IS", "SASA.IS", "SAYAS.IS", "SDTTR.IS", "SEKFK.IS", "SEKUR.IS", "SELEC.IS", "SELVA.IS", "SEYKM.IS", "SILVR.IS",
-    "SISE.IS", "SKBNK.IS", "SKTAS.IS", "SKYMD.IS", "SMART.IS", "SMRTG.IS", "SNGYO.IS", "SNICA.IS", "SOKM.IS", "SONME.IS",
-    "SRVGY.IS", "SUMAS.IS", "SUNTK.IS", "SURGY.IS", "SUWEN.IS", "TABGD.IS", "TARKM.IS", "TATGD.IS", "TAVHL.IS", "TCELL.IS",
-    "TDGYO.IS", "TEKTU.IS", "TERA.IS", "TETMT.IS", "TGSAS.IS", "THYAO.IS", "TIRE.IS", "TKFEN.IS", "TKNSA.IS", "TMSN.IS",
-    "TOASO.IS", "TRCAS.IS", "TRGYO.IS", "TRILC.IS", "TSKB.IS", "TSPOR.IS", "TTKOM.IS", "TTRAK.IS", "TUCLK.IS", "TUKAS.IS",
-    "TUPRS.IS", "TUREX.IS", "TURGG.IS", "TURSG.IS", "UFUK.IS", "ULAS.IS", "ULKER.IS", "ULLY.IS", "ULUFA.IS", "ULUSE.IS",
-    "ULUUN.IS", "USAK.IS", "VAKBN.IS", "VAKFN.IS", "VAKKO.IS", "VANGD.IS", "VBTYZ.IS", "VERTU.IS", "VERUS.IS", "VESBE.IS",
-    "VESTL.IS", "VKGYO.IS", "VKING.IS", "VRGYO.IS", "YAPRK.IS", "YATAS.IS", "YAYLA.IS", "YEOTK.IS", "YESIL.IS", "YGGYO.IS",
-    "YKBNK.IS", "YONGA.IS", "YOTAS.IS", "YUNSA.IS", "YYLGD.IS", "ZEDUR.IS", "ZOREN.IS", "ZRGYO.IS"
+    "DIRIT.IS", "DITAS.IS", "DMSAS.IS", "DNISI.IS", "DOAS.IS", "DOCO.IS", "DOGUB.IS", "DOHOL.IS", "DOKTA.IS",
+    "DURDO.IS", "DYOBY.IS", "DZGYO.IS", "EBEBK.IS", "ECILC.IS", "ECZYT.IS", "EDATA.IS", "EDIP.IS", "EGEEN.IS", "EGGUB.IS",
+    "EGPRO.IS", "EGSER.IS", "EKGYO.IS", "EKOS.IS", "EKSUN.IS", "ELITE.IS", "EMKEL.IS", "ENERY.IS", "ENJSA.IS", "ENKAI.IS",
+    "ENSRI.IS", "EPLAS.IS", "ERBOS.IS", "EREGL.IS", "ERSU.IS", "ESCOM.IS", "ESEN.IS", "ETILR.IS", "EUPWR.IS", "EUREN.IS",
+    "EYGYO.IS", "FENER.IS", "FLAP.IS", "FMIZP.IS", "FONET.IS", "FORMT.IS", "FORTE.IS", "FRIGO.IS", "FROTO.IS", "FZLGY.IS",
+    "GARAN.IS", "GEDIK.IS", "GEDZA.IS", "GENIL.IS", "GENTS.IS", "GEREL.IS", "GESAN.IS", "GIPTA.IS", "GLBMD.IS", "GLRYH.IS",
+    "GLYHO.IS", "GOKNR.IS", "GOLTS.IS", "GOODY.IS", "GOZDE.IS", "GSDDE.IS", "GSDHO.IS", "GSRAY.IS", "GUBRF.IS", "GWIND.IS",
+    "GZNMI.IS", "HALKB.IS", "HATEK.IS", "HATSN.IS", "HEDEF.IS", "HEKTS.IS", "HKTM.IS", "HLGYO.IS", "HRKET.IS", "HTTBT.IS",
+    "HUNER.IS", "HURGZ.IS", "ICBCT.IS", "IDGYO.IS", "IEYHO.IS", "IHAAS.IS", "IHEVA.IS", "IHGZT.IS", "IHLAS.IS", "IHLGM.IS",
+    "IKLGT.IS", "IMASM.IS", "INDES.IS", "INFO.IS", "INGRM.IS", "INVEO.IS", "INVES.IS", "IPEKE.IS", "ISATR.IS", "ISBTR.IS",
+    "ISCTR.IS", "ISFIN.IS", "ISGSY.IS", "ISGYO.IS", "ISKPL.IS", "ISMEN.IS", "ISSEN.IS", "ISYAT.IS", "IZENR.IS", "IZMDC.IS",
+    "IZINV.IS", "JANTS.IS", "KAPLM.IS", "KARYE.IS", "KATMR.IS", "KAYSE.IS", "KCAER.IS", "KCHOL.IS", "KENT.IS", "KERVT.IS",
+    "KFEIN.IS", "KGYO.IS", "KIMMR.IS", "KLGYO.IS", "KLMSN.IS", "KLNMA.IS", "KLRHO.IS", "KLSYN.IS", "KMPUR.IS", "KNFRT.IS",
+    "KONKA.IS", "KONTR.IS", "KONYA.IS", "KORDS.IS", "KOZAA.IS", "KOZAL.IS", "KRDMA.IS", "KRDMB.IS", "KRDMD.IS", "KRGYO.IS",
+    "KRONT.IS", "KRPLS.IS", "KRSTL.IS", "KRTEK.IS", "KRVGD.IS", "KTSKR.IS", "KUTPO.IS", "KUYAS.IS", "KZBGY.IS", "KZGYO.IS",
+    "LIDER.IS", "LIDFA.IS", "LINK.IS", "LKMNH.IS", "LOGOS.IS", "LUKSK.IS", "MAALT.IS", "MACKO.IS", "MAGEN.IS", "MAKIM.IS",
+    "MAKTK.IS", "MANAS.IS", "MARBL.IS", "MARTI.IS", "MAVI.IS", "MEDTR.IS", "MEGAP.IS", "MEKAG.IS", "MEPET.IS", "MERCN.IS",
+    "MERKO.IS", "METRO.IS", "METUR.IS", "MHRGY.IS", "MIATK.IS", "MIPAZ.IS", "MNDRS.IS", "MOBTL.IS", "MGROS.IS", "MOGAN.IS",
+    "MPARK.IS", "MRGYO.IS", "MRSHL.IS", "MSGYO.IS", "MTRKS.IS", "MZHLD.IS", "NATEN.IS", "NETAS.IS", "NIBAS.IS", "NTGAZ.IS",
+    "NUGYO.IS", "NUHCM.IS", "OBAMS.IS", "OBASE.IS", "ODAS.IS", "ONCSM.IS", "ORCAY.IS", "ORGE.IS", "ORMA.IS", "OSMEN.IS",
+    "OSTIM.IS", "OTKAR.IS", "OYAKC.IS", "OYAYO.IS", "OYLUM.IS", "OYYAT.IS", "OZGYO.IS", "OZKGY.IS", "OZRDN.IS", "OZSUB.IS",
+    "PAGYO.IS", "PAMEL.IS", "PAPIL.IS", "PARSN.IS", "PASEU.IS", "PATEK.IS", "PCILT.IS", "PEGYO.IS", "PEKGY.IS", "PENTA.IS",
+    "PETKM.IS", "PETUN.IS", "PGSUS.IS", "PINSU.IS", "PKART.IS", "PKENT.IS", "PLTUR.IS", "PNLSN.IS", "PNSUT.IS", "POLHO.IS",
+    "POLTK.IS", "PRKAB.IS", "PRKME.IS", "PRZMA.IS", "PSDTC.IS", "QUAGR.IS", "RALYH.IS", "RAYYS.IS", "REEDR.IS", "RNPOL.IS",
+    "RODRG.IS", "RTALB.IS", "RUBNS.IS", "RYGYO.IS", "RYSAS.IS", "SAFKR.IS", "SAHOL.IS", "SAMAT.IS", "SANEL.IS", "SANFM.IS",
+    "SANKO.IS", "SARKY.IS", "SASA.IS", "SAYAS.IS", "SDTTR.IS", "SEKFK.IS", "SEKUR.IS", "SELEC.IS", "SELVA.IS", "SEYKM.IS",
+    "SILVR.IS", "SISE.IS", "SKBNK.IS", "SKTAS.IS", "SKYMD.IS", "SMART.IS", "SMRTG.IS", "SNGYO.IS", "SNICA.IS", "SOKM.IS",
+    "SONME.IS", "SRVGY.IS", "SUMAS.IS", "SUNTK.IS", "SURGY.IS", "SUWEN.IS", "TABGD.IS", "TARKM.IS", "TATGD.IS", "TAVHL.IS",
+    "TCELL.IS", "TDGYO.IS", "TEKTU.IS", "TERA.IS", "TETMT.IS", "TGSAS.IS", "THYAO.IS", "TIRE.IS", "TKFEN.IS", "TKNSA.IS",
+    "TMSN.IS", "TOASO.IS", "TRCAS.IS", "TRGYO.IS", "TRILC.IS", "TSKB.IS", "TSPOR.IS", "TTKOM.IS", "TTRAK.IS", "TUCLK.IS",
+    "TUKAS.IS", "TUPRS.IS", "TUREX.IS", "TURGG.IS", "TURSG.IS", "UFUK.IS", "ULAS.IS", "ULKER.IS", "ULLY.IS", "ULUFA.IS",
+    "ULUSE.IS", "ULUUN.IS", "USAK.IS", "VAKBN.IS", "VAKFN.IS", "VAKKO.IS", "VANGD.IS", "VBTYZ.IS", "VERTU.IS", "VERUS.IS",
+    "VESBE.IS", "VESTL.IS", "VKGYO.IS", "VKING.IS", "VRGYO.IS", "YAPRK.IS", "YATAS.IS", "YAYLA.IS", "YEOTK.IS", "YESIL.IS",
+    "YGGYO.IS", "YKBNK.IS", "YONGA.IS", "YOTAS.IS", "YUNSA.IS", "YYLGD.IS", "ZEDUR.IS", "ZOREN.IS", "ZRGYO.IS"
 ])))
 
 @st.cache_data(ttl=3600)
@@ -85,122 +88,90 @@ tab1, tab2, tab3 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Habe
 
 # --- TAB 1: PAZAR ANALİZİ ---
 with tab1:
-    st.subheader("🔍 Tarama Ayarları")
+    st.subheader("🔥 BIST Taraması")
+    score_threshold = st.slider("🎯 Minimum skor eşiği", 0, 100, 50)
     
-    # Sidebar'dan buraya taşınan kontroller
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        score_threshold = st.slider("Minimum Skor Eşiği", 0, 100, 50)
-    with col2:
-        start_button = st.button("Analizi Başlat / Güncelle", use_container_width=True)
+    if st.button("🔄 Analizi Başlat / Güncelle"):
+        st.session_state.last_run = True
 
-    if start_button:
+    if 'last_run' in st.session_state:
         raw_data = fetch_master_data(bist_full_list)
         results = []
         progress_bar = st.progress(0)
-        status_text = st.empty()
-        total_tickers = len(bist_full_list)
         
         for i, ticker in enumerate(bist_full_list):
             try:
-                status_text.text(f"Analiz ediliyor: {ticker} ({i+1}/{total_tickers})")
                 df = raw_data[ticker].copy().dropna()
                 if len(df) < 130: continue
-
-                # Teknik & Momentum
+                
                 cp = df['Close'].iloc[-1]
                 prev_p = df['Close'].iloc[-2]
                 day_chg = ((cp - prev_p) / prev_p) * 100
-                ret_1w = ((cp - df['Close'].iloc[-6]) / df['Close'].iloc[-6]) * 100
                 ret_1m = ((cp - df['Close'].iloc[-22]) / df['Close'].iloc[-22]) * 100
-                ret_6m = ((cp - df['Close'].iloc[-127]) / df['Close'].iloc[-127]) * 100
                 
                 df['RSI'] = ta.rsi(df['Close'], length=14)
                 rsi = df['RSI'].iloc[-1]
                 sma50 = ta.sma(df['Close'], length=50).iloc[-1]
                 
-                # Temel Veriler (Info çekimi hızı etkiler, hata kontrolü önemli)
-                info = yf.Ticker(ticker).info
-                sektor = info.get('sector', 'Diğer')
-                fk = info.get('trailingPE', None)
-                pddd = info.get('priceToBook', None)
-
-                # Skorlama
                 skor = 0
                 if 30 < rsi < 45: skor += 20
                 if cp > sma50: skor += 20
-                if fk and 0 < fk < 15: skor += 30
                 if ret_1m > 0: skor += 30
 
-                # Sinyal
-                if day_chg >= 9.5: sinyal = "🚀 TAVAN"
-                elif rsi < 30: sinyal = "💎 GÜÇLÜ AL"
-                elif rsi > 70: sinyal = "🔥 GÜÇLÜ SAT"
-                elif skor >= 70: sinyal = "✅ AL"
-                elif skor >= 40: sinyal = "⌛ BEKLE"
-                else: sinyal = "⚠️ RİSKLİ / SAT"
-
                 results.append({
-                    "Sektör": sektor, "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
-                    "Günlük %": round(day_chg, 2), "1H %": round(ret_1w, 1), "1A %": round(ret_1m, 1),
-                    "6A %": round(ret_6m, 1), "RSI": round(rsi, 1), "F/K": round(fk, 1) if fk else "N/A",
-                    "PD/DD": round(pddd, 1) if pddd else "N/A", "Skor": skor, "Sinyal": sinyal
+                    "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
+                    "Günlük %": round(day_chg, 2), "1A %": round(ret_1m, 1), "RSI": round(rsi, 1), "Skor": skor
                 })
-                progress_bar.progress((i + 1) / total_tickers)
-            except:
-                continue
-
-        status_text.text("Analiz Tamamlandı!")
+                progress_bar.progress((i + 1) / len(bist_full_list))
+            except: continue
+            
         res_df = pd.DataFrame(results)
-        final_df = res_df[res_df['Skor'] >= score_threshold].sort_values(by=["Sektör", "Skor"], ascending=[True, False])
-        
-        st.success(f"Şartları sağlayan {len(final_df)} hisse bulundu.")
+        final_df = res_df[res_df['Skor'] >= score_threshold].sort_values(by="Skor", ascending=False)
         st.dataframe(final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), use_container_width=True)
-        
-        csv = final_df.to_csv(index=False).encode('utf-8')
-        st.download_button("Sonuçları İndir (CSV)", csv, "bist_analiz_sonuclari.csv", "text/csv")
-    
-    # --- Hisse Detay Analizi (Tarama Sonuçlarının Altında) ---
-    st.markdown("---")
-    st.subheader("📈 Hisse Teknik Grafik İnceleme")
-    selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
 
-    if selected_ticker:
-        try:
-            hisse_obj = yf.Ticker(selected_ticker)
-            detail_data = hisse_obj.history(period="2y")
-            if not detail_data.empty:
-                detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
-                detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
-                plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna()
-                st.line_chart(plot_df)
-                st.info(f"{selected_ticker} hissesinin son 6 aylık fiyat ve hareketli ortalama grafiği.")
-        except:
-            st.error("Grafik yüklenirken bir hata oluştu.")
+        if not final_df.empty:
+            st.divider()
+            st.subheader("📈 Hisse Teknik Analiz Grafiği")
+            selected_plot = st.selectbox("Hisse Seçin:", final_df['Hisse'].tolist(), key="market_chart")
+            if selected_plot:
+                ticker_full = f"{selected_plot}.IS"
+                plot_data = yf.download(ticker_full, period="1y", interval="1d", progress=False)
+                if not plot_data.empty:
+                    plot_data['SMA50'] = ta.sma(plot_data['Close'], length=50)
+                    plot_data['SMA200'] = ta.sma(plot_data['Close'], length=200)
+                    st.line_chart(plot_data[['Close', 'SMA50', 'SMA200']].tail(150))
+    else:
+        st.info("Analizi başlatmak için butona tıklayın.")
 
 # --- TAB 2: PORTFÖYÜM ---
 with tab2:
-    st.subheader("💼 Portföyüm")
-    st.info("Bu bölüm portföy takibi için ayrılmıştır. Buraya maliyet ve adet bilgilerinizi ekleyebilirsiniz.")
-    # Örnek bir portföy tablosu yapısı
+    st.subheader("💼 Portföy Durumu")
     if 'portfolio_data' not in st.session_state:
-        st.session_state.portfolio_data = pd.DataFrame([{"Hisse": "THYAO", "Adet": 0, "Maliyet": 0.0}])
-    
+        st.session_state.portfolio_data = pd.DataFrame([{"Hisse Kodu": "THYAO", "Adet": 1, "Maliyet": 300.0}])
     edited_df = st.data_editor(st.session_state.portfolio_data, num_rows="dynamic", use_container_width=True)
     st.session_state.portfolio_data = edited_df
 
-# --- TAB 3: HABERLER ---
+# --- TAB 3: GOOGLE NEWS HABERLERİ ---
 with tab3:
-    st.subheader("📰 Güncel Haberler")
-    news_ticker = st.selectbox("Haberlerini görmek istediğiniz hisse:", bist_full_list, key="news_ticker")
+    st.subheader("📰 Güncel Haberler (Google News)")
+    news_ticker = st.selectbox("Haberlerini görmek istediğiniz hisse:", bist_full_list, key="news_only")
+    
     if news_ticker:
-        h_obj = yf.Ticker(news_ticker)
-        news = h_obj.news
-        if news:
-            for item in news[:5]:
-                st.write(f"🔗 **[{item['title']}]({item['link']})**")
+        hisse_sade = news_ticker.replace(".IS", "")
+        # Google News RSS URL (Türkçe sonuçlar için hl=tr ve gl=TR)
+        search_query = quote(f"{hisse_sade} hisse borsa")
+        rss_url = f"https://news.google.com/rss/search?q={search_query}&hl=tr&gl=TR&ceid=TR:tr"
+        
+        feed = feedparser.parse(rss_url)
+        
+        if feed.entries:
+            for entry in feed.entries[:8]: # Son 8 haber
+                with st.container():
+                    st.markdown(f"### [{entry.title}]({entry.link})")
+                    st.caption(f"📅 Yayınlanma: {entry.published} | 🏢 Kaynak: {entry.source.title}")
+                    st.divider()
         else:
-            st.write("Bu hisse için güncel haber bulunamadı.")
+            st.warning(f"{hisse_sade} için güncel haber bulunamadı.")
 
 st.markdown("---")
-st.caption("BIST Master Analiz Terminali | Veriler teknik momentum ve temel analiz çarpanları ile hesaplanır.")
+st.caption("BIST Master Analiz Terminali | Veriler Google News ve Yahoo Finance üzerinden çekilmektedir.")

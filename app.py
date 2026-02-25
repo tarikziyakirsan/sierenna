@@ -93,21 +93,14 @@ def fetch_master_data(tickers):
 tab1, tab2, tab3 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Haberler"])
 
 # --- TAB 1: PAZAR ANALİZİ ---
+# --- TAB 1: PAZAR ANALİZİ ---
 with tab1:
-    st.subheader("🔍 Tarama ve Filtreleme Ayarları")
+    st.subheader("🔍 Tarama Ayarları")
     
-    # Mevcut Ayarlar Satırı (Filtreleme buraya entegre edildi)
-    col1, col2, col3 = st.columns([1.5, 2, 1])
+    col1, col2 = st.columns([3, 1])
     with col1:
         score_threshold = st.slider("Minimum Skor Eşiği", 0, 100, 50)
     with col2:
-        # Tabloya ait sinyal filtresi burada
-        selected_signals = st.multiselect(
-            "Sinyal Filtresi:", 
-            options=["🚀 TAVAN", "💎 GÜÇLÜ AL", "✅ AL", "⌛ BEKLE", "⚠️ SAT", "🔥 GÜÇLÜ SAT"],
-            default=["🚀 TAVAN", "💎 GÜÇLÜ AL", "✅ AL"]
-        )
-    with col3:
         start_button = st.button("Analizi Başlat / Güncelle", use_container_width=True)
 
     if "analysis_results" not in st.session_state:
@@ -129,25 +122,21 @@ with tab1:
                 cp = df['Close'].iloc[-1]
                 prev_p = df['Close'].iloc[-2]
                 
-                # Değişim Hesaplamaları
                 day_chg = ((cp - prev_p) / prev_p) * 100
                 ret_1m = ((cp - df['Close'].iloc[-22]) / df['Close'].iloc[-22]) * 100
-                ret_3m = ((cp - df['Close'].iloc[-63]) / df['Close'].iloc[-63]) * 100 if len(df) > 63 else 0
-                ret_6m = ((cp - df['Close'].iloc[-126]) / df['Close'].iloc[-126]) * 100 if len(df) > 126 else 0
+                ret_3m = ((cp - df['Close'].iloc[-63]) / df['Close'].iloc[-63]) * 100
+                ret_6m = ((cp - df['Close'].iloc[-126]) / df['Close'].iloc[-126]) * 100
                 
-                # Teknik Göstergeler
                 df['RSI'] = ta.rsi(df['Close'], length=14)
                 rsi = df['RSI'].iloc[-1]
                 sma50 = ta.sma(df['Close'], length=50).iloc[-1]
                 
-                # Skorlama
                 skor = 0
                 if 30 < rsi < 45: skor += 20
                 if cp > sma50: skor += 20
                 if ret_1m > 0: skor += 30
                 if day_chg > 0: skor += 30
 
-                # Sinyal Belirleme
                 if day_chg >= 9.5: sinyal = "🚀 TAVAN"
                 elif rsi < 30: sinyal = "💎 GÜÇLÜ AL"
                 elif rsi > 70: sinyal = "🔥 GÜÇLÜ SAT"
@@ -156,21 +145,44 @@ with tab1:
                 else: sinyal = "⚠️ SAT"
 
                 results.append({
-                    "Hisse": ticker.replace(".IS", ""), 
-                    "Fiyat": round(cp, 2),
-                    "Günlük %": round(day_chg, 2), 
-                    "1A %": round(ret_1m, 1),
-                    "3A %": round(ret_3m, 1), 
-                    "6A %": round(ret_6m, 1),
-                    "RSI": round(rsi, 1), 
-                    "Skor": skor, 
-                    "Sinyal": sinyal
+                    "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
+                    "Günlük %": round(day_chg, 2), "1A %": round(ret_1m, 1),
+                    "3A %": round(ret_3m, 1), "6A %": round(ret_6m, 1),
+                    "RSI": round(rsi, 1), "Skor": skor, "Sinyal": sinyal
                 })
                 progress_bar.progress((i + 1) / total_tickers)
             except: continue
 
         status_text.text("Analiz Tamamlandı!")
         st.session_state.analysis_results = pd.DataFrame(results)
+
+    # --- TABLO GÖSTERİMİ (FİLTRELEMELİ) ---
+    if st.session_state.analysis_results is not None:
+        df_res = st.session_state.analysis_results.copy()
+        
+        # Sinyal Filtresi Widget'ını kaldırdık, yerine tablo içi hızlı arama kutusu koyduk
+        search_query = st.text_input("🔍 Tablo İçinde Ara (Hisse adı, sinyal veya skor yazın...)", placeholder="Örn: GÜÇLÜ AL veya THYAO")
+        
+        # Skor eşiğine göre ana filtreleme
+        final_df = df_res[df_res["Skor"] >= score_threshold]
+        
+        # Eğer arama kutusuna bir şey yazılırsa tabloyu filtrele
+        if search_query:
+            final_df = final_df[final_df.apply(lambda row: row.astype(str).str.contains(search_query, case=False).any(), axis=1)]
+        
+        st.success(f"Filtreye uygun {len(final_df)} hisse listeleniyor.")
+        
+        # Tabloyu daha gelişmiş gösterelim
+        st.dataframe(
+            final_df.sort_values(by="Skor", ascending=False),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Skor": st.column_config.ProgressColumn("Skor", min_value=0, max_value=100, format="%d"),
+                "Fiyat": st.column_config.NumberColumn("Fiyat", format="%.2f TL"),
+                "Sinyal": st.column_config.TextColumn("Sinyal")
+            }
+        )
 
     # --- TABLO GÖSTERİMİ ---
     if st.session_state.analysis_results is not None:

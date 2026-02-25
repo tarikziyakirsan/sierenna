@@ -3,21 +3,17 @@ import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
 import feedparser
+import pytz
 from urllib.parse import quote
 from datetime import datetime
 from email.utils import parsedate_to_datetime
-import pytz # Saat dilimi için gerekli
-
-# Türkiye saat dilimini tanımla
-TR_SAAT_DILIMI = pytz.timezone('Europe/Istanbul')
-
-# Saati çekerken bu dilimi kullan
-guncel_zaman = datetime.now(TR_SAAT_DILIMI).strftime('%d.%m.%Y %H:%M')
 
 # --- 1. SAYFA AYARLARI ---
 st.set_page_config(page_title="BIST Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
 
-# Sidebar'ı gizleyen CSS
+# Türkiye Saat Dilimi Ayarı
+TR_TZ = pytz.timezone('Europe/Istanbul')
+
 st.markdown("""
     <style>
         [data-testid="stSidebar"], [data-testid="stSidebarNav"], .css-1dp56ee, .css-yk4q2l {
@@ -101,27 +97,23 @@ with tab1:
         results = []
         progress_bar = st.progress(0)
         status_text = st.empty()
-        total_tickers = len(bist_full_list)
         
         for i, ticker in enumerate(bist_full_list):
             try:
-                status_text.text(f"Analiz ediliyor: {ticker} ({i+1}/{total_tickers})")
+                status_text.text(f"Analiz ediliyor: {ticker}")
                 df = raw_data[ticker].copy().dropna()
                 if len(df) < 130: continue
                 cp = df['Close'].iloc[-1]
                 prev_p = df['Close'].iloc[-2]
                 day_chg = ((cp - prev_p) / prev_p) * 100
-                ret_1m = ((cp - df['Close'].iloc[-22]) / df['Close'].iloc[-22]) * 100
                 df['RSI'] = ta.rsi(df['Close'], length=14)
                 rsi = df['RSI'].iloc[-1]
                 sma50 = ta.sma(df['Close'], length=50).iloc[-1]
-                info = yf.Ticker(ticker).info
-                fk = info.get('trailingPE', None)
+                
                 skor = 0
                 if 30 < rsi < 45: skor += 20
                 if cp > sma50: skor += 20
-                if fk and 0 < fk < 15: skor += 30
-                if ret_1m > 0: skor += 30
+                if day_chg > 0: skor += 30
 
                 if day_chg >= 9.5: sinyal = "🚀 TAVAN"
                 elif rsi < 30: sinyal = "💎 GÜÇLÜ AL"
@@ -132,32 +124,15 @@ with tab1:
 
                 results.append({
                     "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
-                    "Günlük %": round(day_chg, 2), "1A %": round(ret_1m, 1),
-                    "RSI": round(rsi, 1), "F/K": round(fk, 1) if fk else "N/A", "Skor": skor, "Sinyal": sinyal
+                    "Günlük %": round(day_chg, 2), "RSI": round(rsi, 1), 
+                    "Skor": skor, "Sinyal": sinyal
                 })
-                progress_bar.progress((i + 1) / total_tickers)
+                progress_bar.progress((i + 1) / len(bist_full_list))
             except: continue
 
-        status_text.text("Analiz Tamamlandı!")
         res_df = pd.DataFrame(results)
         final_df = res_df[res_df['Skor'] >= score_threshold].sort_values(by=["Skor"], ascending=False)
-        st.success(f"Şartları sağlayan {len(final_df)} hisse bulundu.")
         st.dataframe(final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), use_container_width=True, hide_index=True)
-        csv = final_df.to_csv(index=False).encode('utf-8')
-        st.download_button("Sonuçları İndir (CSV)", csv, "bist_analiz_sonuclari.csv", "text/csv")
-    
-    st.markdown("---")
-    st.subheader("📈 Hisse Teknik Grafik İnceleme")
-    selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
-    if selected_ticker:
-        try:
-            hisse_obj = yf.Ticker(selected_ticker)
-            detail_data = hisse_obj.history(period="2y")
-            if not detail_data.empty:
-                detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
-                detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
-                st.line_chart(detail_data[['Close', 'SMA50', 'SMA200']].tail(150))
-        except: st.error("Grafik yüklenirken bir hata oluştu.")
 
 # --- TAB 2: PORTFÖYÜM ---
 with tab2:
@@ -167,48 +142,39 @@ with tab2:
     edited_df = st.data_editor(st.session_state.portfolio_data, num_rows="dynamic", use_container_width=True, hide_index=True)
     st.session_state.portfolio_data = edited_df
 
-# --- TAB 3: CANLI HABER TERMİNALİ (AKILLI SIRALAMA) ---
+# --- TAB 3: CANLI HABER TERMİNALİ (YEREL SAAT SIRALAMASI) ---
 with tab3:
     st.subheader("📰 Canlı Haber Terminali")
-    
     news_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
     news_ticker = st.selectbox("Hisse Filtrele:", news_options, key="news_ticker")
     
-    # Haber Sorgusunu Güçlendirme: Hisse + KAP + Borsa birleşimi
     if news_ticker == "Canlı Akış (Tüm Şirketler)":
         query_text = "(hisse OR borsa OR kap OR bist) when:1d"
     else:
-        hisse_sade = news_ticker.replace(".IS", "")
-        query_text = f"{hisse_sade} (hisse OR kap OR borsa)"
+        query_text = f"{news_ticker.replace('.IS', '')} (hisse OR kap OR borsa)"
     
     rss_url = f"https://news.google.com/rss/search?q={quote(query_text)}&hl=tr&gl=TR&ceid=TR:tr"
     feed = feedparser.parse(rss_url)
     
-    # HABERLERİ TARİHE GÖRE SIRALAMA MANTIĞI
     if feed.entries:
-        # Her habere gerçek bir datetime objesi ekliyoruz
         processed_entries = []
         for entry in feed.entries:
             try:
-                # RFC 822 formatındaki tarihi Python datetime'a çevir
-                entry_dt = parsedate_to_datetime(entry.published)
-                entry.sort_time = entry_dt
+                # Haber tarihini UTC'den TR saatine çevir
+                utc_dt = parsedate_to_datetime(entry.published)
+                tr_dt = utc_dt.astimezone(TR_TZ)
+                entry.sort_time = tr_dt
                 processed_entries.append(entry)
-            except:
-                continue
+            except: continue
         
-        # En yeniden en eskiye (Descending) sırala
         processed_entries.sort(key=lambda x: x.sort_time, reverse=True)
         
         for entry in processed_entries[:15]:
             with st.container():
-                # Tarihi Türkiye formatında yazdır (25 Feb 2026 14:30 gibi)
-                clean_date = entry.sort_time.strftime("%d %b %Y %H:%M")
                 st.markdown(f"### [{entry.title}]({entry.link})")
-                st.caption(f"🕒 **{clean_date}** | 🏢 Kaynak: {entry.source.title}")
+                st.caption(f"🕒 **{entry.sort_time.strftime('%d %b %Y %H:%M')}** | 🏢 {entry.source.title}")
                 st.divider()
-    else:
-        st.info("Son 24 saat içinde yeni bir haber akışı bulunamadı.")
 
 st.markdown("---")
-st.caption(f"BIST Master Analiz Terminali | Son Güncelleme: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+# Alt kısma Türkiye saatiyle güncelleme bilgisi
+st.caption(f"BIST Master Analiz Terminali | Türkiye Saatiyle Son Güncelleme: {datetime.now(TR_TZ).strftime('%d.%m.%Y %H:%M')}")

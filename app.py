@@ -26,8 +26,16 @@ st.markdown("""
 
 # --- 2. BAŞLIK VE YASAL UYARI ---
 st.title("📊 BIST Analiz Terminali")
-st.warning("⚠️ **Yasal Uyarı:** Bu terminaldeki veriler bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. 
-            Veriler gecikmeli olabilir; tüm risk ve sorumluluk kullanıcıya aittir.")
+# app.py içindeki ilgili kısmı bununla değiştirebilirsin
+st.markdown("""
+    <div style="background-color:#fff3cd; padding:15px; border-radius:10px; border:1px solid #ffeeba;">
+        <h4 style="color:#856404; margin-top:0;">⚠️ Yasal Bilgilendirme</h4>
+        <p style="color:#856404; font-size:14px;">
+            Bu terminaldeki veriler bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. 
+            Veriler gecikmeli olabilir; tüm risk ve sorumluluk kullanıcıya aittir.
+        </p>
+    </div>
+""", unsafe_allow_html=True)
 
 # --- 3. HİSSE LİSTESİ ---
 bist_full_list = sorted(list(set([

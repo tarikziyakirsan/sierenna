@@ -3,18 +3,13 @@ import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
 
-# Sayfa Yapılandırması
-st.set_page_config(page_title="BIST Tüm Evren Analizi", layout="wide")
+# --- SAYFA AYARLARI ---
+st.set_page_config(page_title="BIST Master Terminal", layout="wide")
 
-st.title("📊 BIST Tüm Şirketler Master Analiz Paneli")
-st.write("Teknik Momentum, Temel Değerleme ve Performans Denetimi")
+st.title("📊 BIST Master Analiz Terminali")
+st.warning("⚠️ **Yasal Uyarı:** Bu uygulama bilgilendirme amaçlıdır. Yatırım tavsiyesi değildir. Tüm risk kullanıcıya aittir.")
 
-# Yasal Uyarı Bölümü
-st.warning("⚠️ **Yasal Uyarı:** Bu uygulama bilgilendirme amaçlıdır. Burada yer alan veriler, analizler ve skorlar kesinlikle **yatırım tavsiyesi değildir.** Piyasa verileri gecikmeli olabilir ve analiz sonuçları hata payı içerebilir. Yapılan tüm işlemlerin riski ve sorumluluğu tamamen kullanıcıya aittir.")
-
-st.markdown("---")
-
-# 2. BİST LİSTESİ (~560 Hisse)
+# --- 1. HİSSE LİSTESİ (Senin 448'lik Listen) ---
 bist_full_list = sorted(list(set([
     "A1CAP.IS", "ACSEL.IS", "ADEZ.IS", "ADESE.IS", "AEFES.IS", "AFYON.IS", "AGESA.IS", "AGHOL.IS", "AGROT.IS", "AHGAZ.IS",
     "AKBNK.IS", "AKCNS.IS", "AKENR.IS", "AKFGY.IS", "AKFYE.IS", "AKGRT.IS", "AKMGY.IS", "AKSA.IS", "AKSEN.IS", "ALARK.IS",
@@ -62,87 +57,123 @@ bist_full_list = sorted(list(set([
     "VESTL.IS", "VKGYO.IS", "VKING.IS", "VRGYO.IS", "YAPRK.IS", "YATAS.IS", "YAYLA.IS", "YEOTK.IS", "YESIL.IS", "YGGYO.IS",
     "YKBNK.IS", "YONGA.IS", "YOTAS.IS", "YUNSA.IS", "YYLGD.IS", "ZEDUR.IS", "ZOREN.IS", "ZRGYO.IS"
 ])))
-# 3. Veri Çekme Fonksiyonu
+
 @st.cache_data(ttl=3600)
 def fetch_master_data(tickers):
-    data = yf.download(tickers, period="10mo", interval="1d", group_by='ticker', progress=False)
-    return data
+    return yf.download(tickers, period="10mo", interval="1d", group_by='ticker', progress=False)
 
-# 4. Sidebar Filtreleri
-st.sidebar.header("🔍 Analiz Ayarları")
+# --- SIDEBAR (Küresel Filtreler) ---
+st.sidebar.header("⚙️ Master Ayarlar")
 score_threshold = st.sidebar.slider("Minimum Skor Eşiği", 0, 100, 50)
-st.sidebar.info(f"Toplam {len(bist_full_list)} hisse taranacak.")
 
-# 5. Ana Analiz Döngüsü
-if st.sidebar.button("Analizi Başlat / Güncelle"):
-    raw_data = fetch_master_data(bist_full_list)
-    results = []
-    
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    total_tickers = len(bist_full_list)
-    
-    for i, ticker in enumerate(bist_full_list):
-        try:
-            status_text.text(f"Analiz ediliyor: {ticker} ({i+1}/{total_tickers})")
+# --- SEKMELER (TABS) ---
+tab1, tab2, tab3 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Haberler & Detay"])
+
+# --- TAB 1: PAZAR ANALİZİ ---
+with tab1:
+    if st.button("Analizi Başlat / Güncelle"):
+        raw_data = fetch_master_data(bist_full_list)
+        results = []
+        progress_bar = st.progress(0)
+        
+        for i, ticker in enumerate(bist_full_list):
+            try:
+                df = raw_data[ticker].copy().dropna()
+                if len(df) < 130: continue
+                
+                cp = df['Close'].iloc[-1]
+                prev_p = df['Close'].iloc[-2]
+                day_chg = ((cp - prev_p) / prev_p) * 100
+                ret_1m = ((cp - df['Close'].iloc[-22]) / df['Close'].iloc[-22]) * 100
+                
+                df['RSI'] = ta.rsi(df['Close'], length=14)
+                rsi = df['RSI'].iloc[-1]
+                sma50 = ta.sma(df['Close'], length=50).iloc[-1]
+                
+                info = yf.Ticker(ticker).info
+                sektor = info.get('sector', 'Diğer')
+                fk = info.get('trailingPE', None)
+                pddd = info.get('priceToBook', None)
+
+                skor = 0
+                if 30 < rsi < 45: skor += 20
+                if cp > sma50: skor += 20
+                if fk and 0 < fk < 15: skor += 30
+                if ret_1m > 0: skor += 30
+
+                results.append({
+                    "Sektör": sektor, "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
+                    "Günlük %": round(day_chg, 2), "1A %": round(ret_1m, 1), "RSI": round(rsi, 1),
+                    "F/K": round(fk, 1) if fk else "N/A", "Skor": skor
+                })
+                progress_bar.progress((i + 1) / len(bist_full_list))
+            except: continue
             
-            df = raw_data[ticker].copy().dropna()
-            if len(df) < 130: continue
+        res_df = pd.DataFrame(results)
+        final_df = res_df[res_df['Skor'] >= score_threshold].sort_values(by="Skor", ascending=False)
+        st.dataframe(final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), use_container_width=True)
+    else:
+        st.info("Pazar taramasını başlatmak için yukarıdaki butona tıklayın.")
 
-            # Teknik & Momentum
-            cp = df['Close'].iloc[-1]
-            prev_p = df['Close'].iloc[-2]
-            day_chg = ((cp - prev_p) / prev_p) * 100
-            ret_1w = ((cp - df['Close'].iloc[-6]) / df['Close'].iloc[-6]) * 100
-            ret_1m = ((cp - df['Close'].iloc[-22]) / df['Close'].iloc[-22]) * 100
-            ret_6m = ((cp - df['Close'].iloc[-127]) / df['Close'].iloc[-127]) * 100
-            
-            df['RSI'] = ta.rsi(df['Close'], length=14)
-            rsi = df['RSI'].iloc[-1]
-            sma50 = ta.sma(df['Close'], length=50).iloc[-1]
-            
-            # Temel Veriler
-            info = yf.Ticker(ticker).info
-            sektor = info.get('sector', 'Diğer')
-            fk = info.get('trailingPE', None)
-            pddd = info.get('priceToBook', None)
-
-            # Skorlama
-            skor = 0
-            if 30 < rsi < 45: skor += 20
-            if cp > sma50: skor += 20
-            if fk and 0 < fk < 15: skor += 30
-            if ret_1m > 0: skor += 30
-
-            # Sinyal
-            if day_chg >= 9.5: sinyal = "🚀 TAVAN"
-            elif rsi < 30: sinyal = "💎 GÜÇLÜ AL"
-            elif rsi > 70: sinyal = "🔥 GÜÇLÜ SAT"
-            elif skor >= 70: sinyal = "✅ AL"
-            elif skor >= 40: sinyal = "⌛ BEKLE"
-            else: sinyal = "⚠️ RİSKLİ / SAT"
-
-            results.append({
-                "Sektör": sektor, "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
-                "Günlük %": round(day_chg, 2), "1H %": round(ret_1w, 1), "1A %": round(ret_1m, 1),
-                "6A %": round(ret_6m, 1), "RSI": round(rsi, 1), "F/K": round(fk, 1) if fk else "N/A",
-                "PD/DD": round(pddd, 1) if pddd else "N/A", "Skor": skor, "Sinyal": sinyal
-            })
-            progress_bar.progress((i + 1) / total_tickers)
-        except:
-            continue
-
-    status_text.text("Analiz Tamamlandı!")
-    res_df = pd.DataFrame(results)
-    final_df = res_df[res_df['Skor'] >= score_threshold].sort_values(by=["Sektör", "Skor"], ascending=[True, False])
+# --- TAB 2: PORTFÖYÜM (Vibe Portfolio) ---
+with tab2:
+    st.subheader("💼 Kişisel Portföy Takibi")
+    st.write("Hisselerini gir, anlık durumunu izle.")
     
-    st.success(f"Şartları sağlayan {len(final_df)} hisse bulundu.")
-    st.dataframe(final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), use_container_width=True)
+    # Kullanıcının düzenleyebileceği bir tablo
+    portfolio_data = pd.DataFrame(columns=["Hisse Kodu", "Adet", "Maliyet"])
+    edited_df = st.data_editor(portfolio_data, num_rows="dynamic", use_container_width=True)
     
-    csv = final_df.to_csv(index=False).encode('utf-8')
-    st.download_button("Sonuçları İndir (CSV)", csv, "bist_analiz_sonuclari.csv", "text/csv")
-else:
-    st.info("Sol paneldeki 'Analizi Başlat' butonuna tıklayarak işlemi başlatın.")
+    if st.button("Portföyü Hesapla"):
+        if not edited_df.empty:
+            p_results = []
+            for _, row in edited_df.iterrows():
+                t = f"{row['Hisse Kodu'].upper()}.IS"
+                try:
+                    current_price = yf.Ticker(t).history(period="1d")['Close'].iloc[-1]
+                    maliyet = row['Maliyet']
+                    adet = row['Adet']
+                    guncel_deger = current_price * adet
+                    kar_zarar = (current_price - maliyet) * adet
+                    kar_zarar_yuzde = ((current_price - maliyet) / maliyet) * 100
+                    
+                    p_results.append({
+                        "Hisse": row['Hisse Kodu'].upper(),
+                        "Güncel Fiyat": round(current_price, 2),
+                        "Maliyet": maliyet,
+                        "Kar/Zarar TL": round(kar_zarar, 2),
+                        "Kar/Zarar %": round(kar_zarar_yuzde, 2)
+                    })
+                except: st.error(f"{row['Hisse Kodu']} verisi çekilemedi.")
+            
+            if p_results:
+                st.table(pd.DataFrame(p_results))
+                toplam_kz = sum(x['Kar/Zarar TL'] for x in p_results)
+                st.metric("Toplam Kar/Zarar", f"{toplam_kz:,.2f} TL", delta=f"{toplam_kz:,.2f}")
+
+# --- TAB 3: HABERLER & DETAY ---
+with tab3:
+    st.subheader("🔍 Hisse Detay ve Haber Akışı")
+    selected_h = st.selectbox("Detayları görmek istediğiniz hisse:", bist_full_list)
+    
+    if selected_h:
+        h_obj = yf.Ticker(selected_h)
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.write("📈 **Fiyat Grafiği (Son 6 Ay)**")
+            hist = h_obj.history(period="6mo")
+            st.line_chart(hist['Close'])
+            
+        with col2:
+            st.write("📰 **Son Haberler**")
+            news = h_obj.news
+            if news:
+                for item in news[:5]: # Son 5 haber
+                    st.markdown(f"**[{item['title']}]({item['link']})**")
+                    st.caption(f"Kaynak: {item['publisher']}")
+            else:
+                st.write("Bu hisse için yakın zamanda haber bulunamadı.")
 
 # 6. Hisse Detay Analizi (Sayfanın En Altında)
 st.markdown("---")

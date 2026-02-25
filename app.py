@@ -22,11 +22,16 @@ st.markdown("""
 # --- 2. BAŞLIK VE ESKİ SARI UYARI YAZISI ---
 st.title("Bist Master Analiz Terminali")
 
-# İstediğin sarı fontlu yasal uyarı metni
-st.warning("""
-**YASAL UYARI:** Bu uygulama bilgilendirme amaçlıdır. Burada yer alan veriler, analizler ve skorlar kesinlikle yatırım tavsiyesi değildir. 
-Piyasa verileri gecikmeli olabilir ve analiz sonuçları hata payı içerebilir. Yapılan tüm işlemlerin riski ve sorumluluğu tamamen kullanıcıya aittir.
-""")
+# Sayfa Yapılandırması
+st.set_page_config(page_title="BIST Tüm Evren Analizi", layout="wide")
+
+st.title("📊 BIST Tüm Şirketler Master Analiz Paneli")
+st.write("Teknik Momentum, Temel Değerleme ve Performans Denetimi")
+
+# Yasal Uyarı Bölümü
+st.warning("⚠️ **Yasal Uyarı:** Bu uygulama bilgilendirme amaçlıdır. Burada yer alan veriler, analizler ve skorlar kesinlikle **yatırım tavsiyesi değildir.** Piyasa verileri gecikmeli olabilir ve analiz sonuçları hata payı içerebilir. Yapılan tüm işlemlerin riski ve sorumluluğu tamamen kullanıcıya aittir.")
+
+st.markdown("---")
 
 # --- 3. HİSSE LİSTESİ ---
 bist_full_list = sorted(list(set([

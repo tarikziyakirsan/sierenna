@@ -25,8 +25,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. BAŞLIK VE YASAL UYARI ---
-st.title("📊 BIST Analiz Paneli")
-st.warning("⚠️ **Yasal Uyarı:** Veriler yatırım tavsiyesi değildir. Risk kullanıcıya aittir.")
+st.title("📊 BIST Analiz Terminali")
+st.warning("⚠️ **Yasal Uyarı:** Bu terminaldeki veriler bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. 
+            Veriler gecikmeli olabilir; tüm risk ve sorumluluk kullanıcıya aittir.")
 
 # --- 3. HİSSE LİSTESİ ---
 bist_full_list = sorted(list(set([
@@ -207,4 +208,4 @@ with tab3:
 
 st.markdown("---")
 # Alt bilgi saatini Türkiye saatine sabitledik
-st.caption(f"BIST Master Analiz Terminali | Türkiye Saatiyle Son Güncelleme: {datetime.now(TR_TZ).strftime('%d.%m.%Y %H:%M')}")
+st.caption(f"BIST TARIK BABA Analiz Terminali | Son Güncelleme: {datetime.now(TR_TZ).strftime('%d.%m.%Y %H:%M')}")

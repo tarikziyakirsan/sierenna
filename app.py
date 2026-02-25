@@ -224,4 +224,4 @@ with tab3:
 
 st.markdown("---")
 # Alt bilgi saatini Türkiye saatine sabitledik
-st.caption(f"BIST TARIK BABA Analiz Terminali | Son Güncelleme: {datetime.now(TR_TZ).strftime('%d.%m.%Y %H:%M')}")
+st.caption(f"BIST Analiz Terminali | Son Güncelleme: {datetime.now(TR_TZ).strftime('%d.%m.%Y %H:%M')}")

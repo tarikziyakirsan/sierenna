@@ -6,7 +6,7 @@ import pandas_ta as ta
 # Sayfa Yapılandırması
 st.set_page_config(page_title="BIST Şirket Analizi", layout="wide")
 
-st.title("📊 BIST Tüm Şirketler Master Analiz Paneli")
+st.title("📊 BIST Şirketler Analiz Paneli")
 st.write("Teknik Momentum, Temel Değerleme ve Performans Denetimi")
 
 # Yasal Uyarı Bölümü

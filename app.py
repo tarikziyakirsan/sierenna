@@ -40,7 +40,7 @@ st.markdown("""
         text-align: center;
         box-shadow: 0px 2px 5px rgba(0,0,0,0.1);
     ">
-        <strong>⚠️ Yasal Bilgilendirme:</strong> Veriler yatırım tavsiyesi değildir. Tüm sorumluluk kullanıcıya aittir.
+        <strong>⚠️ Yasal Bilgilendirme:</strong> Bu terminaldeki tüm veri ve analizler yatırım tavsiyesi değildir ve profesyonel bir kullanım amacı taşımamaktadır. Buradaki bilgilere dayanılarak alınan kararların sorumluluğu tamamen kullanıcıya aittir.
     </div>
 """, unsafe_allow_html=True)
 

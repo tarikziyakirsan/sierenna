@@ -13,15 +13,13 @@ st.set_page_config(page_title="BIST Analiz Terminali", layout="wide", initial_si
 
 TR_TZ = pytz.timezone('Europe/Istanbul')
 
-# Sidebar ve Spinner/Loading yazılarını tamamen gizleyen stil
+# Stil ve Spinner Gizleme
 st.markdown("""
     <style>
         [data-testid="stSidebar"], [data-testid="stSidebarNav"] {display: none !important;}
         .stApp { margin-left: 0px; }
         .stDataFrame {border: 1px solid #f0f2f6; border-radius: 10px;}
-        /* "Running..." yazısını ve spinner'ı gizler */
         [data-testid="stStatusWidget"] {display: none !important;}
-        .stStatusWidget {display: none !important;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -35,8 +33,8 @@ st.markdown("""
         font-size: 14.5px; font-weight: 500; text-align: center; line-height: 1.4;
         box-shadow: 0px 4px 8px rgba(0,0,0,0.1);
     ">
-        ⚠️ <strong>Bilgilendirme:</strong> Bu terminaldeki veri ve analizler yatırım tavsiyesi değildir ve profesyonel bir kullanım amacı taşımamaktadır. 
-        Tüm sorumluluğun kullanıcıya aittir.
+        ⚠️ <strong>Bilgilendirme:</strong> Bu terminaldeki tüm veri ve analizler yatırım tavsiyesi değildir ve profesyonel bir kullanım amacı taşımamaktadır. 
+        Tüm sorumluluğun kullanıcıya ait olduğunu hatırlatmak isteriz.
     </div>
 """, unsafe_allow_html=True)
 
@@ -53,7 +51,7 @@ bist_full_list = sorted(list(set([
     "BTCIM.IS", "BUCIM.IS", "BURCE.IS", "BURVA.IS", "BVSAN.IS", "BYDNR.IS", "CANTE.IS", "CATES.IS", "CCOLA.IS", "CELHA.IS",
     "CEMAS.IS", "CEMTS.IS", "CEOEM.IS", "CIMSA.IS", "CLEBI.IS", "CONSE.IS", "CVKMD.IS", "CWENE.IS", "DAGHL.IS", "DAGI.IS",
     "DAPGM.IS", "DARDL.IS", "DENGE.IS", "DERIM.IS", "DERHL.IS", "DESA.IS", "DESPC.IS", "DGATE.IS", "DGGYO.IS", "DGNMO.IS",
-    "DIRIT.IS", "DITAS.IS", "DMSAS.IS", "DNISI.IS", "DOAS.IS", "DOCO.IS", "DOGUB.IS", "DOHOL.IS", "DOKTA.IS", "DURDO.IS",
+    "DIRIT.IS", "DITAS.IS", "DMSAS.IS", "DNISI.IS", "DOAS.IS", "DOCO.IS", "DOGUB.IS", "DOGUB.IS", "DOHOL.IS", "DOKTA.IS", "DURDO.IS",
     "DYOBY.IS", "DZGYO.IS", "EBEBK.IS", "ECILC.IS", "ECZYT.IS", "EDATA.IS", "EDIP.IS", "EGEEN.IS", "EGGUB.IS", "EGPRO.IS",
     "EGSER.IS", "EKGYO.IS", "EKOS.IS", "EKSUN.IS", "ELITE.IS", "EMKEL.IS", "ENERY.IS", "ENJSA.IS", "ENKAI.IS", "ENSRI.IS",
     "EPLAS.IS", "ERBOS.IS", "EREGL.IS", "ERSU.IS", "ESCOM.IS", "ESEN.IS", "ETILR.IS", "EUPWR.IS", "EUREN.IS", "EYGYO.IS",
@@ -108,7 +106,6 @@ with tab1:
     if "analysis_results" not in st.session_state:
         st.session_state.analysis_results = None
     
-    # Grafik için seçili hisseyi saklayan state
     if "selected_chart_ticker" not in st.session_state:
         st.session_state.selected_chart_ticker = "THYAO.IS"
 
@@ -162,19 +159,20 @@ with tab1:
         status_text.text("Analiz Tamamlandı!")
         st.session_state.analysis_results = pd.DataFrame(results)
 
-    # --- TABLO VE ARAMA ---
+    # --- ANINDA FİLTRELEME VE TABLO ---
     if st.session_state.analysis_results is not None:
         df_res = st.session_state.analysis_results.copy()
         
-        # Arama Barı (Tarama ayarlarının altında)
-        search_query = st.text_input("🔍 Listede Hisse Ara:", placeholder="Örn: ZOREN, THY...")
+        # Anında Filtreleme Arama Barı
+        search_query = st.text_input("🔍 Listede Hisse Ara (Harfleri yazdığınız an filtrelenir):", key="search_bar")
         
         final_df = df_res[df_res["Skor"] >= score_threshold]
         
         if search_query:
-            final_df = final_df[final_df['Hisse'].str.contains(search_query.upper())]
+            # Büyük/Küçük harf duyarsız arama
+            final_df = final_df[final_df['Hisse'].str.contains(search_query.upper(), na=False)]
 
-        st.success(f"Filtreye uygun {len(final_df)} hisse bulundu. Hisse satırına tıklayarak aşağıdaki grafiği güncelleyebilirsiniz.")
+        st.success(f"Filtreye uygun {len(final_df)} hisse bulundu. Hisseye tıklayarak grafiği güncelleyebilirsiniz.")
         
         # İnteraktif Tablo (single-row seçimi ile)
         selection_event = st.dataframe(
@@ -193,39 +191,38 @@ with tab1:
             }
         )
 
-        # Tablodan bir satır seçildiyse grafik hissesini güncelle
+        # Tablodan bir satır seçildiyse state'i güncelle
         if selection_event.selection.rows:
-            selected_idx = selection_event.selection.rows[0]
-            # final_df filtrelenmiş olduğu için iloc ile doğru satırı alıyoruz
-            hisse_adi = final_df.iloc[selected_idx]["Hisse"]
-            st.session_state.selected_chart_ticker = hisse_adi + ".IS"
+            selected_row_idx = selection_event.selection.rows[0]
+            # Sıralanmış tablodaki doğru satırı bulmak için iloc kullanıyoruz
+            selected_ticker = final_df.sort_values(by="Skor", ascending=False).iloc[selected_row_idx]["Hisse"] + ".IS"
+            st.session_state.selected_chart_ticker = selected_ticker
 
     st.markdown("---")
     st.subheader("📈 Hisse Teknik Grafik İnceleme")
     
-    # State'deki hissenin listedeki yerini bul (Selectbox senkronizasyonu için)
+    # Selectbox'ın başlangıç değerini seçilen hisseye sabitleme
     try:
-        current_list_idx = bist_full_list.index(st.session_state.selected_chart_ticker)
+        current_idx = bist_full_list.index(st.session_state.selected_chart_ticker)
     except:
-        current_list_idx = 0
+        current_idx = 0
 
-    selected_ticker = st.selectbox(
+    selected_ticker_final = st.selectbox(
         "İncelemek istediğiniz hisse:", 
         bist_full_list, 
-        index=current_list_idx,
+        index=current_idx,
         key="detail_select"
     )
 
-    if selected_ticker:
-        # Selectbox değişiminde de state'i güncelle
-        st.session_state.selected_chart_ticker = selected_ticker
+    if selected_ticker_final:
+        st.session_state.selected_chart_ticker = selected_ticker_final
         try:
-            hisse_obj = yf.Ticker(selected_ticker)
-            detail_data = hisse_obj.history(period="2y")
-            if not detail_data.empty:
-                detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
-                detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
-                st.line_chart(detail_data[['Close', 'SMA50', 'SMA200']].tail(150))
+            h_obj = yf.Ticker(selected_ticker_final)
+            d_data = h_obj.history(period="2y")
+            if not d_data.empty:
+                d_data['SMA50'] = ta.sma(d_data['Close'], length=50)
+                d_data['SMA200'] = ta.sma(d_data['Close'], length=200)
+                st.line_chart(d_data[['Close', 'SMA50', 'SMA200']].tail(150))
         except: st.error("Grafik yüklenirken bir hata oluştu.")
 
 # --- TAB 2: PORTFÖYÜM ---
@@ -250,22 +247,21 @@ with tab2:
 
     if st.session_state.my_portfolio:
         df_p = pd.DataFrame(st.session_state.my_portfolio)
-        unique_stocks = df_p['Hisse'].unique().tolist()
+        u_stocks = df_p['Hisse'].unique().tolist()
         try:
-            price_data = yf.download(unique_stocks, period="1d", interval="1m", progress=False)['Close'].iloc[-1]
-            def calculate_row(row):
-                curr_p = price_data[row['Hisse']] if len(unique_stocks) > 1 else price_data
-                total_val = curr_p * row['Adet']
-                total_cost = row['Maliyet'] * row['Adet']
-                pl = total_val - total_cost
-                pl_perc = (pl / total_cost * 100) if total_cost > 0 else 0
-                return pd.Series([round(curr_p, 2), round(total_val, 2), round(pl, 2), round(pl_perc, 2)])
+            p_data = yf.download(u_stocks, period="1d", interval="1m", progress=False)['Close'].iloc[-1]
+            def calc_row(row):
+                c_p = p_data[row['Hisse']] if len(u_stocks) > 1 else p_data
+                t_val = c_p * row['Adet']
+                t_cost = row['Maliyet'] * row['Adet']
+                pl_val = t_val - t_cost
+                pl_p = (pl_val / t_cost * 100) if t_cost > 0 else 0
+                return pd.Series([round(c_p, 2), round(t_val, 2), round(pl_val, 2), round(pl_p, 2)])
 
-            df_p[['Güncel Fiyat', 'Toplam Değer', 'Kâr/Zarar', 'Değişim %']] = df_p.apply(calculate_row, axis=1)
+            df_p[['Güncel Fiyat', 'Toplam Değer', 'Kâr/Zarar', 'Değişim %']] = df_p.apply(calc_row, axis=1)
             m1, m2 = st.columns(2)
-            m1.metric("Toplam Portföy Değeri", f"{df_p['Toplam Değer'].sum():,.2f} TL")
-            net_pl = df_p['Kâr/Zarar'].sum()
-            m2.metric("Toplam Net Kâr/Zarar", f"{net_pl:,.2f} TL", delta=f"{net_pl:,.2f}")
+            m1.metric("Toplam Değer", f"{df_p['Toplam Değer'].sum():,.2f} TL")
+            m2.metric("Toplam Net K/Z", f"{df_p['Kâr/Zarar'].sum():,.2f} TL", delta=f"{df_p['Kâr/Zarar'].sum():,.2f}")
             st.dataframe(df_p, use_container_width=True, hide_index=True)
             if st.button("Portföyü Sıfırla"):
                 st.session_state.my_portfolio = []
@@ -275,29 +271,24 @@ with tab2:
 # --- TAB 3: HABERLER ---
 with tab3:
     st.subheader("📰 Canlı Haber Terminali")
-    news_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
-    news_ticker = st.selectbox("Hisse Filtrele:", news_options, key="news_filter_box")
-    
-    query_text = "(hisse OR borsa OR kap OR bist) when:1d" if news_ticker == "Canlı Akış (Tüm Şirketler)" else f"{news_ticker.replace('.IS', '')} (hisse OR kap OR borsa)"
-    
-    rss_url = f"https://news.google.com/rss/search?q={quote(query_text)}&hl=tr&gl=TR&ceid=TR:tr"
+    n_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
+    n_ticker = st.selectbox("Hisse Filtrele:", n_options, key="news_filter_box")
+    q_text = "(hisse OR borsa OR kap OR bist) when:1d" if n_ticker == "Canlı Akış (Tüm Şirketler)" else f"{n_ticker.replace('.IS', '')} (hisse OR kap OR borsa)"
+    rss_url = f"https://news.google.com/rss/search?q={quote(q_text)}&hl=tr&gl=TR&ceid=TR:tr"
     feed = feedparser.parse(rss_url)
-    
     if feed.entries:
-        processed_entries = []
-        for entry in feed.entries:
+        proc = []
+        for e in feed.entries:
             try:
-                utc_dt = parsedate_to_datetime(entry.published)
-                tr_dt = utc_dt.astimezone(TR_TZ)
-                entry.sort_time = tr_dt
-                processed_entries.append(entry)
+                dt = parsedate_to_datetime(e.published).astimezone(TR_TZ)
+                e.sort_time = dt
+                proc.append(e)
             except: continue
-        processed_entries.sort(key=lambda x: x.sort_time, reverse=True)
-        
-        for entry in processed_entries[:20]:
+        proc.sort(key=lambda x: x.sort_time, reverse=True)
+        for e in proc[:20]:
             with st.container():
-                st.markdown(f"### [{entry.title}]({entry.link})")
-                st.caption(f"🕒 {entry.sort_time.strftime('%d.%m.%Y %H:%M')} | {entry.source.title}")
+                st.markdown(f"### [{e.title}]({e.link})")
+                st.caption(f"🕒 {e.sort_time.strftime('%d.%m.%Y %H:%M')} | {e.source.title}")
                 st.divider()
     else: st.info("Haber bulunamadı.")
 

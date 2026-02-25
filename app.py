@@ -13,12 +13,14 @@ st.set_page_config(page_title="BIST Analiz Terminali", layout="wide", initial_si
 
 TR_TZ = pytz.timezone('Europe/Istanbul')
 
-# Sidebar ve Spinner Gizleme
+# Sidebar ve Spinner/Loading yazılarını tamamen gizleyen stil
 st.markdown("""
     <style>
         [data-testid="stSidebar"], [data-testid="stSidebarNav"] {display: none !important;}
         .stApp { margin-left: 0px; }
         .stDataFrame {border: 1px solid #f0f2f6; border-radius: 10px;}
+        /* "Running..." yazısını ve spinner'ı gizler */
+        [data-testid="stStatusWidget"] {display: none !important;}
         .stStatusWidget {display: none !important;}
     </style>
 """, unsafe_allow_html=True)
@@ -34,7 +36,7 @@ st.markdown("""
         box-shadow: 0px 4px 8px rgba(0,0,0,0.1);
     ">
         ⚠️ <strong>Bilgilendirme:</strong> Bu terminaldeki veri ve analizler yatırım tavsiyesi değildir ve profesyonel bir kullanım amacı taşımamaktadır. 
-        Tüm sorumluluğun kullanıcıya ait olduğunu hatırlatmak isteriz.
+        Tüm sorumluluğun kullanıcıya aittir.
     </div>
 """, unsafe_allow_html=True)
 
@@ -106,9 +108,9 @@ with tab1:
     if "analysis_results" not in st.session_state:
         st.session_state.analysis_results = None
     
-    # Seçili hisseyi saklamak için (Tablodan tıklama özelliği)
+    # Grafik için seçili hisseyi saklayan state
     if "selected_chart_ticker" not in st.session_state:
-        st.session_state.selected_chart_ticker = bist_full_list[0]
+        st.session_state.selected_chart_ticker = "THYAO.IS"
 
     if start_button:
         raw_data = fetch_master_data(bist_full_list)
@@ -164,56 +166,59 @@ with tab1:
     if st.session_state.analysis_results is not None:
         df_res = st.session_state.analysis_results.copy()
         
-        # 1. YENİ ÖZELLİK: Arama Barı
-        search_query = st.text_input("🔍 Hisse Ara:", placeholder="Hisse adı veya kodu yazın (Örn: THY, ASELS)...")
+        # Arama Barı (Tarama ayarlarının altında)
+        search_query = st.text_input("🔍 Listede Hisse Ara:", placeholder="Örn: ZOREN, THY...")
         
         final_df = df_res[df_res["Skor"] >= score_threshold]
         
         if search_query:
             final_df = final_df[final_df['Hisse'].str.contains(search_query.upper())]
 
-        st.success(f"Filtreye uygun {len(final_df)} hisse listeleniyor. (Hisseye tıklayarak grafiği güncelleyebilirsiniz)")
+        st.success(f"Filtreye uygun {len(final_df)} hisse bulundu. Hisse satırına tıklayarak aşağıdaki grafiği güncelleyebilirsiniz.")
         
-        # 2. YENİ ÖZELLİK: Tablodan Tıklama ile Seçim
+        # İnteraktif Tablo (single-row seçimi ile)
         selection_event = st.dataframe(
             final_df.sort_values(by="Skor", ascending=False),
             use_container_width=True,
             hide_index=True,
             on_select="rerun",
-            selection_mode="single_row",
+            selection_mode="single-row",
             column_config={
                 "Skor": st.column_config.ProgressColumn("Skor", min_value=0, max_value=100, format="%d"),
                 "Fiyat": st.column_config.NumberColumn("Fiyat", format="%.2f TL"),
                 "Günlük %": st.column_config.NumberColumn("Günlük %", format="%.2f"),
                 "3A %": st.column_config.NumberColumn("3A %", format="%.1f"),
-                "6A %": st.column_config.NumberColumn("6A %", format="%.1f")
+                "6A %": st.column_config.NumberColumn("6A %", format="%.1f"),
+                "RSI": st.column_config.NumberColumn("RSI", format="%.1f")
             }
         )
 
-        # Seçim yapıldıysa ticker'ı güncelle
+        # Tablodan bir satır seçildiyse grafik hissesini güncelle
         if selection_event.selection.rows:
-            selected_index = selection_event.selection.rows[0]
-            ticker_from_table = final_df.iloc[selected_index]["Hisse"] + ".IS"
-            st.session_state.selected_chart_ticker = ticker_from_table
+            selected_idx = selection_event.selection.rows[0]
+            # final_df filtrelenmiş olduğu için iloc ile doğru satırı alıyoruz
+            hisse_adi = final_df.iloc[selected_idx]["Hisse"]
+            st.session_state.selected_chart_ticker = hisse_adi + ".IS"
 
     st.markdown("---")
     st.subheader("📈 Hisse Teknik Grafik İnceleme")
     
-    # Seçenekler listesinde tıklanan hissenin yerini bul
+    # State'deki hissenin listedeki yerini bul (Selectbox senkronizasyonu için)
     try:
-        current_idx = bist_full_list.index(st.session_state.selected_chart_ticker)
+        current_list_idx = bist_full_list.index(st.session_state.selected_chart_ticker)
     except:
-        current_idx = 0
+        current_list_idx = 0
 
     selected_ticker = st.selectbox(
-        "Grafiğini görmek istediğiniz hisseyi seçin:", 
+        "İncelemek istediğiniz hisse:", 
         bist_full_list, 
-        index=current_idx,
+        index=current_list_idx,
         key="detail_select"
     )
 
     if selected_ticker:
-        st.session_state.selected_chart_ticker = selected_ticker # Selectbox'tan manuel seçimi de sakla
+        # Selectbox değişiminde de state'i güncelle
+        st.session_state.selected_chart_ticker = selected_ticker
         try:
             hisse_obj = yf.Ticker(selected_ticker)
             detail_data = hisse_obj.history(period="2y")
@@ -270,24 +275,29 @@ with tab2:
 # --- TAB 3: HABERLER ---
 with tab3:
     st.subheader("📰 Canlı Haber Terminali")
-    n_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
-    n_ticker = st.selectbox("Hisse Filtrele:", n_options, key="news_filter_box")
-    q_text = "(hisse OR borsa OR kap OR bist) when:1d" if n_ticker == "Canlı Akış (Tüm Şirketler)" else f"{n_ticker.replace('.IS', '')} (hisse OR kap OR borsa)"
-    rss_url = f"https://news.google.com/rss/search?q={quote(q_text)}&hl=tr&gl=TR&ceid=TR:tr"
+    news_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
+    news_ticker = st.selectbox("Hisse Filtrele:", news_options, key="news_filter_box")
+    
+    query_text = "(hisse OR borsa OR kap OR bist) when:1d" if news_ticker == "Canlı Akış (Tüm Şirketler)" else f"{news_ticker.replace('.IS', '')} (hisse OR kap OR borsa)"
+    
+    rss_url = f"https://news.google.com/rss/search?q={quote(query_text)}&hl=tr&gl=TR&ceid=TR:tr"
     feed = feedparser.parse(rss_url)
+    
     if feed.entries:
-        proc = []
-        for e in feed.entries:
+        processed_entries = []
+        for entry in feed.entries:
             try:
-                dt = parsedate_to_datetime(e.published).astimezone(TR_TZ)
-                e.sort_time = dt
-                proc.append(e)
+                utc_dt = parsedate_to_datetime(entry.published)
+                tr_dt = utc_dt.astimezone(TR_TZ)
+                entry.sort_time = tr_dt
+                processed_entries.append(entry)
             except: continue
-        proc.sort(key=lambda x: x.sort_time, reverse=True)
-        for e in proc[:20]:
+        processed_entries.sort(key=lambda x: x.sort_time, reverse=True)
+        
+        for entry in processed_entries[:20]:
             with st.container():
-                st.markdown(f"### [{e.title}]({e.link})")
-                st.caption(f"🕒 {e.sort_time.strftime('%d.%m.%Y %H:%M')} | {e.source.title}")
+                st.markdown(f"### [{entry.title}]({entry.link})")
+                st.caption(f"🕒 {entry.sort_time.strftime('%d.%m.%Y %H:%M')} | {entry.source.title}")
                 st.divider()
     else: st.info("Haber bulunamadı.")
 

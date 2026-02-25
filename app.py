@@ -3,18 +3,31 @@ import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
 
-# Sayfa Yapılandırması
-st.set_page_config(page_title="BIST Şirket Analizi", layout="wide")
+# --- 1. SAYFA AYARLARI VE SIDEBAR'I TAMAMEN GİZLEME ---
+st.set_page_config(page_title="BIST Master Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
 
-st.title("📊 BIST Şirketler Analiz Paneli")
+# Sidebar'ı ve açılır kapanır oku tamamen ortadan kaldıran CSS
+st.markdown("""
+    <style>
+        [data-testid="stSidebar"], [data-testid="stSidebarNav"], .css-1dp56ee, .css-yk4q2l {
+            display: none !important;
+        }
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+        .stApp { margin-left: 0px; }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- 2. BAŞLIK VE YASAL UYARI ---
+st.title("📊 BIST Tüm Şirketler Master Analiz Paneli")
 st.write("Teknik Momentum, Temel Değerleme ve Performans Denetimi")
 
-# Yasal Uyarı Bölümü
 st.warning("⚠️ **Yasal Uyarı:** Bu uygulama bilgilendirme amaçlıdır. Burada yer alan veriler, analizler ve skorlar kesinlikle **yatırım tavsiyesi değildir.** Piyasa verileri gecikmeli olabilir ve analiz sonuçları hata payı içerebilir. Yapılan tüm işlemlerin riski ve sorumluluğu tamamen kullanıcıya aittir.")
 
 st.markdown("---")
 
-# 2. BİST LİSTESİ (~560 Hisse)
+# --- 3. HİSSE LİSTESİ ---
 bist_full_list = sorted(list(set([
     "A1CAP.IS", "ACSEL.IS", "ADEZ.IS", "ADESE.IS", "AEFES.IS", "AFYON.IS", "AGESA.IS", "AGHOL.IS", "AGROT.IS", "AHGAZ.IS",
     "AKBNK.IS", "AKCNS.IS", "AKENR.IS", "AKFGY.IS", "AKFYE.IS", "AKGRT.IS", "AKMGY.IS", "AKSA.IS", "AKSEN.IS", "ALARK.IS",
@@ -62,110 +75,132 @@ bist_full_list = sorted(list(set([
     "VESTL.IS", "VKGYO.IS", "VKING.IS", "VRGYO.IS", "YAPRK.IS", "YATAS.IS", "YAYLA.IS", "YEOTK.IS", "YESIL.IS", "YGGYO.IS",
     "YKBNK.IS", "YONGA.IS", "YOTAS.IS", "YUNSA.IS", "YYLGD.IS", "ZEDUR.IS", "ZOREN.IS", "ZRGYO.IS"
 ])))
-# 3. Veri Çekme Fonksiyonu
+
 @st.cache_data(ttl=3600)
 def fetch_master_data(tickers):
-    data = yf.download(tickers, period="10mo", interval="1d", group_by='ticker', progress=False)
-    return data
+    return yf.download(tickers, period="10mo", interval="1d", group_by='ticker', progress=False)
 
-# 4. Sidebar Filtreleri
-st.sidebar.header("🔍 Analiz Ayarları")
-score_threshold = st.sidebar.slider("Minimum Skor Eşiği", 0, 100, 50)
-st.sidebar.info(f"Toplam {len(bist_full_list)} hisse taranacak.")
+# --- 4. SEKMELER ---
+tab1, tab2, tab3 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Haberler"])
 
-# 5. Ana Analiz Döngüsü
-if st.sidebar.button("Analizi Başlat / Güncelle"):
-    raw_data = fetch_master_data(bist_full_list)
-    results = []
+# --- TAB 1: PAZAR ANALİZİ ---
+with tab1:
+    st.subheader("🔍 Tarama Ayarları")
     
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    total_tickers = len(bist_full_list)
-    
-    for i, ticker in enumerate(bist_full_list):
-        try:
-            status_text.text(f"Analiz ediliyor: {ticker} ({i+1}/{total_tickers})")
-            
-            df = raw_data[ticker].copy().dropna()
-            if len(df) < 130: continue
+    # Sidebar'dan buraya taşınan kontroller
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        score_threshold = st.slider("Minimum Skor Eşiği", 0, 100, 50)
+    with col2:
+        start_button = st.button("Analizi Başlat / Güncelle", use_container_width=True)
 
-            # Teknik & Momentum
-            cp = df['Close'].iloc[-1]
-            prev_p = df['Close'].iloc[-2]
-            day_chg = ((cp - prev_p) / prev_p) * 100
-            ret_1w = ((cp - df['Close'].iloc[-6]) / df['Close'].iloc[-6]) * 100
-            ret_1m = ((cp - df['Close'].iloc[-22]) / df['Close'].iloc[-22]) * 100
-            ret_6m = ((cp - df['Close'].iloc[-127]) / df['Close'].iloc[-127]) * 100
-            
-            df['RSI'] = ta.rsi(df['Close'], length=14)
-            rsi = df['RSI'].iloc[-1]
-            sma50 = ta.sma(df['Close'], length=50).iloc[-1]
-            
-            # Temel Veriler
-            info = yf.Ticker(ticker).info
-            sektor = info.get('sector', 'Diğer')
-            fk = info.get('trailingPE', None)
-            pddd = info.get('priceToBook', None)
-
-            # Skorlama
-            skor = 0
-            if 30 < rsi < 45: skor += 20
-            if cp > sma50: skor += 20
-            if fk and 0 < fk < 15: skor += 30
-            if ret_1m > 0: skor += 30
-
-            # Sinyal
-            if day_chg >= 9.5: sinyal = "🚀 TAVAN"
-            elif rsi < 30: sinyal = "💎 GÜÇLÜ AL"
-            elif rsi > 70: sinyal = "🔥 GÜÇLÜ SAT"
-            elif skor >= 70: sinyal = "✅ AL"
-            elif skor >= 40: sinyal = "⌛ BEKLE"
-            else: sinyal = "⚠️ RİSKLİ / SAT"
-
-            results.append({
-                "Sektör": sektor, "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
-                "Günlük %": round(day_chg, 2), "1H %": round(ret_1w, 1), "1A %": round(ret_1m, 1),
-                "6A %": round(ret_6m, 1), "RSI": round(rsi, 1), "F/K": round(fk, 1) if fk else "N/A",
-                "PD/DD": round(pddd, 1) if pddd else "N/A", "Skor": skor, "Sinyal": sinyal
-            })
-            progress_bar.progress((i + 1) / total_tickers)
-        except:
-            continue
-
-    status_text.text("Analiz Tamamlandı!")
-    res_df = pd.DataFrame(results)
-    final_df = res_df[res_df['Skor'] >= score_threshold].sort_values(by=["Sektör", "Skor"], ascending=[True, False])
-    
-    st.success(f"Şartları sağlayan {len(final_df)} hisse bulundu.")
-    st.dataframe(final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), use_container_width=True)
-    
-    csv = final_df.to_csv(index=False).encode('utf-8')
-    st.download_button("Sonuçları İndir (CSV)", csv, "bist_analiz_sonuclari.csv", "text/csv")
-else:
-    st.info("Sol paneldeki 'Analizi Başlat' butonuna tıklayarak işlemi başlatın.")
-
-# 6. Hisse Detay Analizi (Sayfanın En Altında)
-st.markdown("---")
-st.subheader("📈 Hisse Detay Analizi")
-selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
-
-if selected_ticker:
-    try:
-        hisse_obj = yf.Ticker(selected_ticker)
-        detail_data = hisse_obj.history(period="2y")
+    if start_button:
+        raw_data = fetch_master_data(bist_full_list)
+        results = []
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        total_tickers = len(bist_full_list)
         
-        if not detail_data.empty:
-            detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
-            detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
-            
-            plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna()
-            
-            if not plot_df.empty:
+        for i, ticker in enumerate(bist_full_list):
+            try:
+                status_text.text(f"Analiz ediliyor: {ticker} ({i+1}/{total_tickers})")
+                df = raw_data[ticker].copy().dropna()
+                if len(df) < 130: continue
+
+                # Teknik & Momentum
+                cp = df['Close'].iloc[-1]
+                prev_p = df['Close'].iloc[-2]
+                day_chg = ((cp - prev_p) / prev_p) * 100
+                ret_1w = ((cp - df['Close'].iloc[-6]) / df['Close'].iloc[-6]) * 100
+                ret_1m = ((cp - df['Close'].iloc[-22]) / df['Close'].iloc[-22]) * 100
+                ret_6m = ((cp - df['Close'].iloc[-127]) / df['Close'].iloc[-127]) * 100
+                
+                df['RSI'] = ta.rsi(df['Close'], length=14)
+                rsi = df['RSI'].iloc[-1]
+                sma50 = ta.sma(df['Close'], length=50).iloc[-1]
+                
+                # Temel Veriler (Info çekimi hızı etkiler, hata kontrolü önemli)
+                info = yf.Ticker(ticker).info
+                sektor = info.get('sector', 'Diğer')
+                fk = info.get('trailingPE', None)
+                pddd = info.get('priceToBook', None)
+
+                # Skorlama
+                skor = 0
+                if 30 < rsi < 45: skor += 20
+                if cp > sma50: skor += 20
+                if fk and 0 < fk < 15: skor += 30
+                if ret_1m > 0: skor += 30
+
+                # Sinyal
+                if day_chg >= 9.5: sinyal = "🚀 TAVAN"
+                elif rsi < 30: sinyal = "💎 GÜÇLÜ AL"
+                elif rsi > 70: sinyal = "🔥 GÜÇLÜ SAT"
+                elif skor >= 70: sinyal = "✅ AL"
+                elif skor >= 40: sinyal = "⌛ BEKLE"
+                else: sinyal = "⚠️ RİSKLİ / SAT"
+
+                results.append({
+                    "Sektör": sektor, "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
+                    "Günlük %": round(day_chg, 2), "1H %": round(ret_1w, 1), "1A %": round(ret_1m, 1),
+                    "6A %": round(ret_6m, 1), "RSI": round(rsi, 1), "F/K": round(fk, 1) if fk else "N/A",
+                    "PD/DD": round(pddd, 1) if pddd else "N/A", "Skor": skor, "Sinyal": sinyal
+                })
+                progress_bar.progress((i + 1) / total_tickers)
+            except:
+                continue
+
+        status_text.text("Analiz Tamamlandı!")
+        res_df = pd.DataFrame(results)
+        final_df = res_df[res_df['Skor'] >= score_threshold].sort_values(by=["Sektör", "Skor"], ascending=[True, False])
+        
+        st.success(f"Şartları sağlayan {len(final_df)} hisse bulundu.")
+        st.dataframe(final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), use_container_width=True)
+        
+        csv = final_df.to_csv(index=False).encode('utf-8')
+        st.download_button("Sonuçları İndir (CSV)", csv, "bist_analiz_sonuclari.csv", "text/csv")
+    
+    # --- Hisse Detay Analizi (Tarama Sonuçlarının Altında) ---
+    st.markdown("---")
+    st.subheader("📈 Hisse Teknik Grafik İnceleme")
+    selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
+
+    if selected_ticker:
+        try:
+            hisse_obj = yf.Ticker(selected_ticker)
+            detail_data = hisse_obj.history(period="2y")
+            if not detail_data.empty:
+                detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
+                detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
+                plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna()
                 st.line_chart(plot_df)
                 st.info(f"{selected_ticker} hissesinin son 6 aylık fiyat ve hareketli ortalama grafiği.")
-            else:
-                st.warning("SMA200 hesaplamak için yeterli veri yok.")
+        except:
+            st.error("Grafik yüklenirken bir hata oluştu.")
+
+# --- TAB 2: PORTFÖYÜM ---
+with tab2:
+    st.subheader("💼 Portföyüm")
+    st.info("Bu bölüm portföy takibi için ayrılmıştır. Buraya maliyet ve adet bilgilerinizi ekleyebilirsiniz.")
+    # Örnek bir portföy tablosu yapısı
+    if 'portfolio_data' not in st.session_state:
+        st.session_state.portfolio_data = pd.DataFrame([{"Hisse": "THYAO", "Adet": 0, "Maliyet": 0.0}])
+    
+    edited_df = st.data_editor(st.session_state.portfolio_data, num_rows="dynamic", use_container_width=True)
+    st.session_state.portfolio_data = edited_df
+
+# --- TAB 3: HABERLER ---
+with tab3:
+    st.subheader("📰 Güncel Haberler")
+    news_ticker = st.selectbox("Haberlerini görmek istediğiniz hisse:", bist_full_list, key="news_ticker")
+    if news_ticker:
+        h_obj = yf.Ticker(news_ticker)
+        news = h_obj.news
+        if news:
+            for item in news[:5]:
+                st.write(f"🔗 **[{item['title']}]({item['link']})**")
         else:
-            st.error("Veri çekilemedi.")
-    except Exception as e:
-        st.error(f"Grafik yüklenirken hata oluştu: {e}")
+            st.write("Bu hisse için güncel haber bulunamadı.")
+
+st.markdown("---")
+st.caption("BIST Master Analiz Terminali | Veriler teknik momentum ve temel analiz çarpanları ile hesaplanır.")

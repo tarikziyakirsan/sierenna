@@ -115,42 +115,90 @@ with tab1:
     else:
         st.info("Pazar taramasını başlatmak için yukarıdaki butona tıklayın.")
 
-# --- TAB 2: PORTFÖYÜM (Vibe Portfolio) ---
+# --- TAB 2: PORTFÖYÜM (Gelişmiş & Stabil Versiyon) ---
 with tab2:
     st.subheader("💼 Kişisel Portföy Takibi")
-    st.write("Hisselerini gir, anlık durumunu izle.")
     
-    # Kullanıcının düzenleyebileceği bir tablo
-    portfolio_data = pd.DataFrame(columns=["Hisse Kodu", "Adet", "Maliyet"])
-    edited_df = st.data_editor(portfolio_data, num_rows="dynamic", use_container_width=True)
+    # Sayfa yenilendiğinde verilerin silinmemesi için Session State kullanıyoruz
+    if 'portfolio_data' not in st.session_state:
+        st.session_state.portfolio_data = pd.DataFrame([
+            {"Hisse Kodu": "THYAO", "Adet": 10, "Maliyet": 250.0}
+        ])
+
+    st.write("Aşağıdaki tabloya hisselerini ekle. (Silmek için satırı seçip 'Delete'e basabilirsin)")
     
+    # Veri Editörü
+    edited_df = st.data_editor(
+        st.session_state.portfolio_data, 
+        num_rows="dynamic", 
+        use_container_width=True,
+        key="portfolio_editor"
+    )
+    
+    # Değişiklikleri kaydet
+    st.session_state.portfolio_data = edited_df
+
     if st.button("Portföyü Hesapla"):
         if not edited_df.empty:
             p_results = []
+            
+            # İlerleme çubuğu (küçük bir vibe dokunuşu)
+            p_status = st.empty()
+            p_status.info("Anlık fiyatlar çekiliyor...")
+            
             for _, row in edited_df.iterrows():
-                t = f"{row['Hisse Kodu'].upper()}.IS"
+                hisse = str(row['Hisse Kodu']).strip().upper()
+                if not hisse: continue
+                
+                t = f"{hisse}.IS" if not hisse.endswith(".IS") else hisse
+                
                 try:
-                    current_price = yf.Ticker(t).history(period="1d")['Close'].iloc[-1]
-                    maliyet = row['Maliyet']
-                    adet = row['Adet']
-                    guncel_deger = current_price * adet
-                    kar_zarar = (current_price - maliyet) * adet
-                    kar_zarar_yuzde = ((current_price - maliyet) / maliyet) * 100
+                    # Fiyat çekme işlemini daha güvenli hale getirdik
+                    h_ticker = yf.Ticker(t)
+                    h_hist = h_ticker.history(period="1d")
                     
-                    p_results.append({
-                        "Hisse": row['Hisse Kodu'].upper(),
-                        "Güncel Fiyat": round(current_price, 2),
-                        "Maliyet": maliyet,
-                        "Kar/Zarar TL": round(kar_zarar, 2),
-                        "Kar/Zarar %": round(kar_zarar_yuzde, 2)
-                    })
-                except: st.error(f"{row['Hisse Kodu']} verisi çekilemedi.")
+                    if not h_hist.empty:
+                        current_price = h_hist['Close'].iloc[-1]
+                        maliyet = float(row['Maliyet'])
+                        adet = float(row['Adet'])
+                        
+                        guncel_deger = current_price * adet
+                        kar_zarar = (current_price - maliyet) * adet
+                        kar_zarar_yuzde = ((current_price - maliyet) / maliyet) * 100
+                        
+                        p_results.append({
+                            "Hisse": hisse,
+                            "Fiyat": round(current_price, 2),
+                            "Maliyet": maliyet,
+                            "Adet": adet,
+                            "Kâr/Zarar TL": round(kar_zarar, 2),
+                            "Kâr/Zarar %": f"%{kar_zarar_yuzde:.2f}"
+                        })
+                    else:
+                        st.error(f"{hisse} için fiyat bulunamadı. Kodun doğru olduğundan emin ol.")
+                except Exception as e:
+                    st.error(f"{hisse} analiz edilirken hata: {e}")
+            
+            p_status.empty() # Mesajı temizle
             
             if p_results:
-                st.table(pd.DataFrame(p_results))
-                toplam_kz = sum(x['Kar/Zarar TL'] for x in p_results)
-                st.metric("Toplam Kar/Zarar", f"{toplam_kz:,.2f} TL", delta=f"{toplam_kz:,.2f}")
-
+                final_p_df = pd.DataFrame(p_results)
+                st.markdown("### 📊 Portföy Durumu")
+                st.dataframe(final_p_df, use_container_width=True)
+                
+                # Toplam metrikler
+                total_kz = sum(x['Kâr/Zarar TL'] for x in p_results)
+                c1, c2 = st.columns(2)
+                c1.metric("Toplam Kâr/Zarar", f"{total_kz:,.2f} TL", delta=f"{total_kz:,.2f} TL")
+                
+                # Vibe check: Kar varsa yeşil, zarar varsa kırmızı
+                if total_kz > 0:
+                    st.balloons()
+                    st.success("Vibe check: Portföy yeşil! 🔥")
+                elif total_kz < 0:
+                    st.warning("Vibe check: Biraz kırmızı var ama toparlarız. 📉")
+        else:
+            st.warning("Portföy tablosu boş. Lütfen hisse ekle.")
 # --- TAB 3: HABERLER & DETAY ---
 with tab3:
     st.subheader("🔍 Hisse Detay ve Haber Akışı")

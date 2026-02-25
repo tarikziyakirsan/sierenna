@@ -3,29 +3,31 @@ import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
 import feedparser
-import pytz  # Saat dilimi yönetimi için
+import pytz
 from urllib.parse import quote
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 
-# --- 1. SAYFA AYARLARI VE SAAT DİLİMİ ---
+# --- 1. SAYFA AYARLARI VE TASARIM ---
 st.set_page_config(page_title="BIST Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
 
-# Türkiye Saat Dilimi Tanımlama
+# Türkiye Saat Dilimi
 TR_TZ = pytz.timezone('Europe/Istanbul')
 
-# Sidebar'ı tamamen gizleyen CSS
+# Sidebar Gizleme ve Genel Stil
 st.markdown("""
     <style>
-        [data-testid="stSidebar"], [data-testid="stSidebarNav"], .css-1dp56ee, .css-yk4q2l {
-            display: none !important;
-        }
+        [data-testid="stSidebar"], [data-testid="stSidebarNav"] {display: none !important;}
         .stApp { margin-left: 0px; }
+        /* Tabloyu daha okunaklı yap */
+        .stDataFrame {border: 1px solid #f0f2f6; border-radius: 10px;}
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. BAŞLIK VE YASAL UYARI ---
+# --- 2. BAŞLIK VE KÜÇÜK YASAL UYARI ---
 st.title("📊 BIST Analiz Terminali")
+
+# İstediğin küçük, koyu sarı, ortalanmış yasal uyarı
 st.markdown("""
     <div style="
         background-color: #ffca28; 
@@ -34,14 +36,13 @@ st.markdown("""
         border-radius: 50px; 
         border: 1px solid #f57f17; 
         width: fit-content; 
-        margin: 10px auto; 
-        font-size: 15px; 
+        margin: 0 auto 20px auto; 
+        font-size: 14px; 
         font-weight: 500;
         text-align: center;
         box-shadow: 0px 2px 5px rgba(0,0,0,0.1);
     ">
-        <strong>⚠️ Yasal Bilgilendirme:</strong> 
-        Bu terminal ve veriler bilgilendirme amaçlıdır, yatırım tavsiyesi değildir. Tüm sorumluluk kullanıcıya aittir.
+        <strong>⚠️ Yasal Bilgilendirme:</strong> Veriler yatırım tavsiyesi değildir. Tüm sorumluluk kullanıcıya aittir.
     </div>
 """, unsafe_allow_html=True)
 
@@ -101,7 +102,7 @@ def fetch_master_data(tickers):
 # --- 4. SEKMELER ---
 tab1, tab2, tab3 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Haberler"])
 
-# --- TAB 1: PAZAR ANALİZİ (Değiştirilmedi) ---
+# --- TAB 1: PAZAR ANALİZİ ---
 with tab1:
     st.subheader("🔍 Tarama Ayarları")
     col1, col2 = st.columns([2, 1])
@@ -157,106 +158,79 @@ with tab1:
         final_df = res_df[res_df['Skor'] >= score_threshold].sort_values(by=["Skor"], ascending=False)
         st.success(f"Şartları sağlayan {len(final_df)} hisse bulundu.")
         st.dataframe(final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), use_container_width=True, hide_index=True)
-        csv = final_df.to_csv(index=False).encode('utf-8')
-        st.download_button("Sonuçları İndir (CSV)", csv, "bist_analiz_sonuclari.csv", "text/csv")
-    
-    st.markdown("---")
-    st.subheader("📈 Hisse Teknik Grafik İnceleme")
-    selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
-    if selected_ticker:
-        try:
-            hisse_obj = yf.Ticker(selected_ticker)
-            detail_data = hisse_obj.history(period="2y")
-            if not detail_data.empty:
-                detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
-                detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
-                st.line_chart(detail_data[['Close', 'SMA50', 'SMA200']].tail(150))
-        except: st.error("Grafik yüklenirken bir hata oluştu.")
 
-# --- TAB 2: PORTFÖYÜM ---
+# --- TAB 2: PORTFÖYÜM (GÜNCEL & HATASIZ) ---
 with tab2:
     st.subheader("💼 Portföy Yönetimi")
-
-    # Portföyü session_state üzerinde saklayalım
+    
     if 'my_portfolio' not in st.session_state:
         st.session_state.my_portfolio = []
 
-    # --- HİSSE EKLEME ALANI ---
-    with st.expander("➕ Yeni Hisse Ekle", expanded=True):
-        col1, col2, col3 = st.columns([3, 2, 2])
+    # Hisse Ekleme Bölümü
+    with st.expander("➕ Portföye Hisse Ekle", expanded=True):
+        c1, c2, c3 = st.columns([3, 1, 1])
+        with c1:
+            # Otomatik tamamlama burada: "thy" yazarsan THYAO.IS'yi seçebilirsin
+            selected_stock = st.selectbox("Hisse Ara/Seç:", options=bist_full_list, index=None, placeholder="Örn: THY...", key="port_select")
+        with c2:
+            lot = st.number_input("Adet", min_value=1, value=1)
+        with c3:
+            maliyet = st.number_input("Maliyet (TL)", min_value=0.0, value=0.0, step=0.01)
         
-        with col1:
-            # Otomatik tamamlama özelliği burada devreye giriyor
-            selected_stock = st.selectbox("Hisse Seçin (Örn: THY yazabilirsiniz)", 
-                                         options=bist_full_list, 
-                                         index=None,
-                                         placeholder="Hisse kodu arayın...")
-        with col2:
-            lot_size = st.number_input("Adet", min_value=1, step=1, value=1)
-        with col3:
-            buy_price = st.number_input("Maliyet (TL)", min_value=0.01, step=0.01, format="%.2f")
-            
-        if st.button("Portföye Ekle", use_container_width=True):
+        if st.button("Listeye Ekle", use_container_width=True):
             if selected_stock:
-                st.session_state.my_portfolio.append({
-                    "Hisse": selected_stock,
-                    "Adet": lot_size,
-                    "Maliyet": buy_price
-                })
-                st.toast(f"{selected_stock} portföye eklendi!")
+                st.session_state.my_portfolio.append({"Hisse": selected_stock, "Adet": lot, "Maliyet": maliyet})
                 st.rerun()
 
-    # --- PORTFÖY LİSTELEME VE HESAPLAMA ---
+    # Portföy Tablosu ve Kâr/Zarar Hesabı
     if st.session_state.my_portfolio:
-        portfolio_df = pd.DataFrame(st.session_state.my_portfolio)
-        unique_stocks = portfolio_df["Hisse"].unique().tolist()
+        df_p = pd.DataFrame(st.session_state.my_portfolio)
+        unique_stocks = df_p['Hisse'].unique().tolist()
         
         try:
-            # Güncel fiyatları toplu çekelim (Hız için)
-            current_data = yf.download(unique_stocks, period="1d", interval="1m", progress=False)['Close'].iloc[-1]
+            # Güncel fiyatları çek (Toplu çekim)
+            price_data = yf.download(unique_stocks, period="1d", interval="1m", progress=False)['Close'].iloc[-1]
             
-            # DataFrame üzerinde hesaplamalar
-            def calculate_metrics(row):
-                # Tek bir hisse varsa Seri, çok varsa DataFrame döner; ona göre kontrol edelim
-                c_price = current_data[row['Hisse']] if len(unique_stocks) > 1 else current_data
-                current_val = c_price * row['Adet']
+            def calculate_row(row):
+                # Tek bir hisse varken Yahoo Finance farklı format dönebilir, kontrol ediyoruz
+                curr_p = price_data[row['Hisse']] if len(unique_stocks) > 1 else price_data
+                total_val = curr_p * row['Adet']
                 total_cost = row['Maliyet'] * row['Adet']
-                p_l = current_val - total_cost
-                p_l_percent = (p_l / total_cost) * 100 if total_cost > 0 else 0
-                return pd.Series([round(c_price, 2), round(current_val, 2), round(p_l, 2), round(p_l_percent, 2)])
+                pl = total_val - total_cost
+                pl_perc = (pl / total_cost * 100) if total_cost > 0 else 0
+                return pd.Series([round(curr_p, 2), round(total_val, 2), round(pl, 2), round(pl_perc, 2)])
 
-            portfolio_df[['Güncel Fiyat', 'Toplam Değer', 'Kar/Zarar', '% Değişim']] = portfolio_df.apply(calculate_metrics, axis=1)
-
-            # Görselleştirme ve Tablo
-            st.write("### Mevcut Durum")
+            df_p[['Güncel Fiyat', 'Toplam Değer', 'Kâr/Zarar', 'Değişim %']] = df_p.apply(calculate_row, axis=1)
             
-            # Toplam Özet Metrikleri
-            total_pl = portfolio_df['Kar/Zarar'].sum()
-            col_m1, col_m2 = st.columns(2)
-            col_m1.metric("Toplam Portföy Değeri", f"{portfolio_df['Toplam Değer'].sum():,.2f} TL")
-            col_m2.metric("Toplam Kar/Zarar", f"{total_pl:,.2f} TL", delta=f"{total_pl:,.2f} TL")
+            # Özet Bilgiler
+            m1, m2 = st.columns(2)
+            m1.metric("Toplam Portföy Değeri", f"{df_p['Toplam Değer'].sum():,.2f} TL")
+            net_pl = df_p['Kâr/Zarar'].sum()
+            m2.metric("Toplam Net Kâr/Zarar", f"{net_pl:,.2f} TL", delta=f"{net_pl:,.2f}")
 
-            # Renkli Tablo Gösterimi
+            # Renklendirme Fonksiyonu
             def color_pl(val):
-                color = '#2ecc71' if val > 0 else '#e74c3c' if val < 0 else '#f39c12'
-                return f'color: {color}; font-weight: bold'
+                color = 'green' if val > 0 else 'red' if val < 0 else 'black'
+                return f'color: {color}'
 
-            st.dataframe(
-                portfolio_df.style.applymap(color_pl, subset=['Kar/Zarar', '% Değişim']),
-                use_container_width=True,
-                hide_index=True
-            )
-
-            if st.button("Portföyü Temizle"):
+            st.dataframe(df_p.style.applymap(color_pl, subset=['Kâr/Zarar', 'Değişim %']), use_container_width=True, hide_index=True)
+            
+            if st.button("Portföyü Sıfırla"):
                 st.session_state.my_portfolio = []
                 st.rerun()
-
         except Exception as e:
-            st.warning("Veriler güncellenirken bir sorun oluştu. Lütfen biraz bekleyin.")
+            st.warning("Fiyat verileri alınırken bir hata oluştu. Borsa kapalı veya internet bağlantısı zayıf olabilir.")
     else:
-        st.info("Portföyünüz henüz boş. Yukarıdaki bölümden hisse ekleyebilirsiniz.")
+        st.info("Portföyünüz henüz boş.")
+
+# --- TAB 3: CANLI HABER TERMİNALİ (HATASIZ) ---
+with tab3:
+    st.subheader("📰 Canlı Haber Terminali")
     
-    # Haber Sorgusu İyileştirildi (Bugünkü tüm KAP ve Borsa hareketlerini yakalar)
+    # news_ticker tanımını en başa aldık (Hata almamak için)
+    news_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
+    news_ticker = st.selectbox("Hisse Filtrele:", news_options, key="news_filter_box")
+    
     if news_ticker == "Canlı Akış (Tüm Şirketler)":
         query_text = "(hisse OR borsa OR kap OR bist) when:1d"
     else:
@@ -270,26 +244,22 @@ with tab2:
         processed_entries = []
         for entry in feed.entries:
             try:
-                # 1. Haberin yayınlanma tarihini al (UTC)
                 utc_dt = parsedate_to_datetime(entry.published)
-                # 2. Türkiye saatine (TR_TZ) çevir
                 tr_dt = utc_dt.astimezone(TR_TZ)
                 entry.sort_time = tr_dt
                 processed_entries.append(entry)
             except: continue
         
-        # 3. En yeniden en eskiye (Descending) kesin sıralama
         processed_entries.sort(key=lambda x: x.sort_time, reverse=True)
         
-        for entry in processed_entries[:20]: # En güncel 20 haber
+        for entry in processed_entries[:20]:
             with st.container():
-                clean_date = entry.sort_time.strftime("%d %b %Y %H:%M")
                 st.markdown(f"### [{entry.title}]({entry.link})")
-                st.caption(f"🕒 **{clean_date}** | 🏢 Kaynak: {entry.source.title}")
+                st.caption(f"🕒 {entry.sort_time.strftime('%H:%M')} | {entry.source.title}")
                 st.divider()
     else:
-        st.info("Son 24 saat içinde yeni bir haber akışı bulunamadı.")
+        st.info("Son 24 saatte yeni haber akışı bulunamadı.")
 
+# --- ALT BİLGİ ---
 st.markdown("---")
-# Alt bilgi saatini Türkiye saatine sabitledik
 st.caption(f"BIST Analiz Terminali | Son Güncelleme: {datetime.now(TR_TZ).strftime('%d.%m.%Y %H:%M')}")

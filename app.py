@@ -173,20 +173,88 @@ with tab1:
                 st.line_chart(detail_data[['Close', 'SMA50', 'SMA200']].tail(150))
         except: st.error("Grafik yüklenirken bir hata oluştu.")
 
-# --- TAB 2: PORTFÖYÜM (Değiştirilmedi) ---
+# --- TAB 2: PORTFÖYÜM ---
 with tab2:
-    st.subheader("💼 Portföyüm")
-    if 'portfolio_data' not in st.session_state:
-        st.session_state.portfolio_data = pd.DataFrame([{"Hisse": "THYAO", "Adet": 0, "Maliyet": 0.0}])
-    edited_df = st.data_editor(st.session_state.portfolio_data, num_rows="dynamic", use_container_width=True, hide_index=True)
-    st.session_state.portfolio_data = edited_df
+    st.subheader("💼 Portföy Yönetimi")
 
-# --- TAB 3: CANLI HABER TERMİNALİ (Türkiye Saati & Gerçek Zamanlı Sıralama) ---
-with tab3:
-    st.subheader("📰 Canlı Haber Terminali")
-    
-    news_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
-    news_ticker = st.selectbox("Hisse Filtrele:", news_options, key="news_ticker")
+    # Portföyü session_state üzerinde saklayalım
+    if 'my_portfolio' not in st.session_state:
+        st.session_state.my_portfolio = []
+
+    # --- HİSSE EKLEME ALANI ---
+    with st.expander("➕ Yeni Hisse Ekle", expanded=True):
+        col1, col2, col3 = st.columns([3, 2, 2])
+        
+        with col1:
+            # Otomatik tamamlama özelliği burada devreye giriyor
+            selected_stock = st.selectbox("Hisse Seçin (Örn: THY yazabilirsiniz)", 
+                                         options=bist_full_list, 
+                                         index=None,
+                                         placeholder="Hisse kodu arayın...")
+        with col2:
+            lot_size = st.number_input("Adet", min_value=1, step=1, value=1)
+        with col3:
+            buy_price = st.number_input("Maliyet (TL)", min_value=0.01, step=0.01, format="%.2f")
+            
+        if st.button("Portföye Ekle", use_container_width=True):
+            if selected_stock:
+                st.session_state.my_portfolio.append({
+                    "Hisse": selected_stock,
+                    "Adet": lot_size,
+                    "Maliyet": buy_price
+                })
+                st.toast(f"{selected_stock} portföye eklendi!")
+                st.rerun()
+
+    # --- PORTFÖY LİSTELEME VE HESAPLAMA ---
+    if st.session_state.my_portfolio:
+        portfolio_df = pd.DataFrame(st.session_state.my_portfolio)
+        unique_stocks = portfolio_df["Hisse"].unique().tolist()
+        
+        try:
+            # Güncel fiyatları toplu çekelim (Hız için)
+            current_data = yf.download(unique_stocks, period="1d", interval="1m", progress=False)['Close'].iloc[-1]
+            
+            # DataFrame üzerinde hesaplamalar
+            def calculate_metrics(row):
+                # Tek bir hisse varsa Seri, çok varsa DataFrame döner; ona göre kontrol edelim
+                c_price = current_data[row['Hisse']] if len(unique_stocks) > 1 else current_data
+                current_val = c_price * row['Adet']
+                total_cost = row['Maliyet'] * row['Adet']
+                p_l = current_val - total_cost
+                p_l_percent = (p_l / total_cost) * 100 if total_cost > 0 else 0
+                return pd.Series([round(c_price, 2), round(current_val, 2), round(p_l, 2), round(p_l_percent, 2)])
+
+            portfolio_df[['Güncel Fiyat', 'Toplam Değer', 'Kar/Zarar', '% Değişim']] = portfolio_df.apply(calculate_metrics, axis=1)
+
+            # Görselleştirme ve Tablo
+            st.write("### Mevcut Durum")
+            
+            # Toplam Özet Metrikleri
+            total_pl = portfolio_df['Kar/Zarar'].sum()
+            col_m1, col_m2 = st.columns(2)
+            col_m1.metric("Toplam Portföy Değeri", f"{portfolio_df['Toplam Değer'].sum():,.2f} TL")
+            col_m2.metric("Toplam Kar/Zarar", f"{total_pl:,.2f} TL", delta=f"{total_pl:,.2f} TL")
+
+            # Renkli Tablo Gösterimi
+            def color_pl(val):
+                color = '#2ecc71' if val > 0 else '#e74c3c' if val < 0 else '#f39c12'
+                return f'color: {color}; font-weight: bold'
+
+            st.dataframe(
+                portfolio_df.style.applymap(color_pl, subset=['Kar/Zarar', '% Değişim']),
+                use_container_width=True,
+                hide_index=True
+            )
+
+            if st.button("Portföyü Temizle"):
+                st.session_state.my_portfolio = []
+                st.rerun()
+
+        except Exception as e:
+            st.warning("Veriler güncellenirken bir sorun oluştu. Lütfen biraz bekleyin.")
+    else:
+        st.info("Portföyünüz henüz boş. Yukarıdaki bölümden hisse ekleyebilirsiniz.")
     
     # Haber Sorgusu İyileştirildi (Bugünkü tüm KAP ve Borsa hareketlerini yakalar)
     if news_ticker == "Canlı Akış (Tüm Şirketler)":

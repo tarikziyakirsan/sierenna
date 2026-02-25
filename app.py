@@ -87,7 +87,6 @@ bist_full_list = sorted(list(set([
 
 @st.cache_data(ttl=3600)
 def fetch_master_data(tickers):
-    # 3 ve 6 aylık verileri kapsamak için 1 yıllık veri çekiyoruz
     return yf.download(tickers, period="1y", interval="1d", group_by='ticker', progress=False)
 
 # --- 4. SEKMELER ---
@@ -95,11 +94,20 @@ tab1, tab2, tab3 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Habe
 
 # --- TAB 1: PAZAR ANALİZİ ---
 with tab1:
-    st.subheader("🔍 Tarama Ayarları")
-    col1, col2 = st.columns([2, 1])
+    st.subheader("🔍 Tarama ve Filtreleme Ayarları")
+    
+    # Mevcut Ayarlar Satırı (Filtreleme buraya entegre edildi)
+    col1, col2, col3 = st.columns([1.5, 2, 1])
     with col1:
         score_threshold = st.slider("Minimum Skor Eşiği", 0, 100, 50)
     with col2:
+        # Tabloya ait sinyal filtresi burada
+        selected_signals = st.multiselect(
+            "Sinyal Filtresi:", 
+            options=["🚀 TAVAN", "💎 GÜÇLÜ AL", "✅ AL", "⌛ BEKLE", "⚠️ SAT", "🔥 GÜÇLÜ SAT"],
+            default=["🚀 TAVAN", "💎 GÜÇLÜ AL", "✅ AL"]
+        )
+    with col3:
         start_button = st.button("Analizi Başlat / Güncelle", use_container_width=True)
 
     if "analysis_results" not in st.session_state:
@@ -124,7 +132,7 @@ with tab1:
                 # Değişim Hesaplamaları
                 day_chg = ((cp - prev_p) / prev_p) * 100
                 ret_1m = ((cp - df['Close'].iloc[-22]) / df['Close'].iloc[-22]) * 100
-                ret_3m = ((cp - df['Close'].iloc[-66]) / df['Close'].iloc[-66]) * 100 if len(df) > 66 else 0
+                ret_3m = ((cp - df['Close'].iloc[-63]) / df['Close'].iloc[-63]) * 100 if len(df) > 63 else 0
                 ret_6m = ((cp - df['Close'].iloc[-126]) / df['Close'].iloc[-126]) * 100 if len(df) > 126 else 0
                 
                 # Teknik Göstergeler
@@ -139,7 +147,7 @@ with tab1:
                 if ret_1m > 0: skor += 30
                 if day_chg > 0: skor += 30
 
-                # Sinyal Mantığı
+                # Sinyal Belirleme
                 if day_chg >= 9.5: sinyal = "🚀 TAVAN"
                 elif rsi < 30: sinyal = "💎 GÜÇLÜ AL"
                 elif rsi > 70: sinyal = "🔥 GÜÇLÜ SAT"
@@ -148,10 +156,15 @@ with tab1:
                 else: sinyal = "⚠️ SAT"
 
                 results.append({
-                    "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
-                    "Günlük %": round(day_chg, 2), "1A %": round(ret_1m, 1),
-                    "3A %": round(ret_3m, 1), "6A %": round(ret_6m, 1),
-                    "RSI": round(rsi, 1), "Skor": skor, "Sinyal": sinyal
+                    "Hisse": ticker.replace(".IS", ""), 
+                    "Fiyat": round(cp, 2),
+                    "Günlük %": round(day_chg, 2), 
+                    "1A %": round(ret_1m, 1),
+                    "3A %": round(ret_3m, 1), 
+                    "6A %": round(ret_6m, 1),
+                    "RSI": round(rsi, 1), 
+                    "Skor": skor, 
+                    "Sinyal": sinyal
                 })
                 progress_bar.progress((i + 1) / total_tickers)
             except: continue
@@ -159,34 +172,28 @@ with tab1:
         status_text.text("Analiz Tamamlandı!")
         st.session_state.analysis_results = pd.DataFrame(results)
 
-    # --- FİLTRELEME VE GÖSTERİM ---
+    # --- TABLO GÖSTERİMİ ---
     if st.session_state.analysis_results is not None:
         df_res = st.session_state.analysis_results.copy()
         
-        # Sinyal Filtresi (Multiselect)
-        st.markdown("---")
-        col_f1, col_f2 = st.columns([2,1])
-        with col_f1:
-            all_signals = df_res["Sinyal"].unique().tolist()
-            selected_signals = st.multiselect("Sinyale Göre Filtrele:", options=all_signals, default=all_signals)
-        
-        # Filtreyi Uygula
+        # Filtreleri tablo verisine uygula
         filtered_df = df_res[
             (df_res["Skor"] >= score_threshold) & 
             (df_res["Sinyal"].isin(selected_signals))
         ].sort_values(by=["Skor"], ascending=False)
         
-        st.success(f"Şartları sağlayan {len(filtered_df)} hisse bulundu.")
+        st.success(f"Filtreye uygun {len(filtered_df)} hisse listeleniyor.")
+        
+        # İnteraktif Tablo
         st.dataframe(
             filtered_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), 
             use_container_width=True, 
             hide_index=True
         )
 
-    # --- GRAFİK BÖLÜMÜ ---
     st.markdown("---")
     st.subheader("📈 Hisse Teknik Grafik İnceleme")
-    selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
+    selected_ticker = st.selectbox("Hisse Seçin:", bist_full_list, key="detail_select")
     if selected_ticker:
         try:
             hisse_obj = yf.Ticker(selected_ticker)
@@ -195,59 +202,48 @@ with tab1:
                 detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
                 detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
                 st.line_chart(detail_data[['Close', 'SMA50', 'SMA200']].tail(150))
-        except: st.error("Grafik yüklenirken bir hata oluştu.")
+        except: st.error("Grafik yüklenemedi.")
 
 # --- TAB 2: PORTFÖYÜM ---
 with tab2:
     st.subheader("💼 Portföy Yönetimi")
-    if 'my_portfolio' not in st.session_state:
-        st.session_state.my_portfolio = []
-
-    with st.expander("➕ Portföye Hisse Ekle", expanded=True):
+    if 'my_portfolio' not in st.session_state: st.session_state.my_portfolio = []
+    
+    with st.expander("➕ Hisse Ekle", expanded=True):
         c1, c2, c3 = st.columns([3, 1, 1])
-        with c1:
-            selected_stock = st.selectbox("Hisse Ara/Seç:", options=bist_full_list, index=None, placeholder="Örn: THY...", key="port_select")
-        with c2:
-            lot = st.number_input("Adet", min_value=1, value=1)
-        with c3:
-            maliyet = st.number_input("Maliyet (TL)", min_value=0.0, value=0.0, step=0.01)
-        if st.button("Listeye Ekle", use_container_width=True):
-            if selected_stock:
-                st.session_state.my_portfolio.append({"Hisse": selected_stock, "Adet": lot, "Maliyet": maliyet})
+        with c1: stock = st.selectbox("Hisse:", options=bist_full_list, index=None, placeholder="Ara...", key="p_sel")
+        with c2: lot = st.number_input("Adet", min_value=1, value=1)
+        with c3: cost = st.number_input("Maliyet", min_value=0.0, step=0.01)
+        if st.button("Portföye Ekle"):
+            if stock: 
+                st.session_state.my_portfolio.append({"Hisse": stock, "Adet": lot, "Maliyet": cost})
                 st.rerun()
 
     if st.session_state.my_portfolio:
         df_p = pd.DataFrame(st.session_state.my_portfolio)
-        unique_stocks = df_p['Hisse'].unique().tolist()
         try:
-            price_data = yf.download(unique_stocks, period="1d", interval="1m", progress=False)['Close'].iloc[-1]
-            def calculate_row(row):
-                curr_p = price_data[row['Hisse']] if len(unique_stocks) > 1 else price_data
-                total_val = curr_p * row['Adet']
-                total_cost = row['Maliyet'] * row['Adet']
-                pl = total_val - total_cost
-                pl_perc = (pl / total_cost * 100) if total_cost > 0 else 0
-                return pd.Series([round(curr_p, 2), round(total_val, 2), round(pl, 2), round(pl_perc, 2)])
-            df_p[['Güncel Fiyat', 'Toplam Değer', 'Kâr/Zarar', 'Değişim %']] = df_p.apply(calculate_row, axis=1)
-            m1, m2 = st.columns(2)
-            m1.metric("Toplam Değer", f"{df_p['Toplam Değer'].sum():,.2f} TL")
-            m2.metric("Toplam K/Z", f"{df_p['Kâr/Zarar'].sum():,.2f} TL", delta=f"{df_p['Kâr/Zarar'].sum():,.2f}")
+            prices = yf.download(df_p['Hisse'].unique().tolist(), period="1d", interval="1m", progress=False)['Close'].iloc[-1]
+            def calc(row):
+                curr = prices[row['Hisse']] if len(df_p['Hisse'].unique()) > 1 else prices
+                val = curr * row['Adet']
+                pl = val - (row['Maliyet'] * row['Adet'])
+                return pd.Series([round(curr, 2), round(val, 2), round(pl, 2)])
+            df_p[['Güncel', 'Değer', 'K/Z']] = df_p.apply(calc, axis=1)
+            st.metric("Toplam Değer", f"{df_p['Değer'].sum():,.2f} TL")
             st.dataframe(df_p, use_container_width=True, hide_index=True)
-            if st.button("Sıfırla"):
+            if st.button("Sıfırla"): 
                 st.session_state.my_portfolio = []
                 st.rerun()
-        except: st.warning("Fiyat verileri alınamadı.")
+        except: st.warning("Fiyat verisi bekleniyor...")
 
-# --- TAB 3: HABERLER ---
+# --- TAB 3: HABERLER (TARİHLİ) ---
 with tab3:
     st.subheader("📰 Canlı Haber Terminali")
-    news_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
-    news_ticker = st.selectbox("Hisse Filtrele:", news_options, key="news_filter_box")
+    n_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
+    n_ticker = st.selectbox("Filtre:", n_options, key="n_filt")
     
-    query_text = "(hisse OR borsa OR kap OR bist) when:1d" if news_ticker == "Canlı Akış (Tüm Şirketler)" else f"{news_ticker.replace('.IS', '')} (hisse OR kap OR borsa)"
-    
-    rss_url = f"https://news.google.com/rss/search?q={quote(query_text)}&hl=tr&gl=TR&ceid=TR:tr"
-    feed = feedparser.parse(rss_url)
+    q = "(hisse OR borsa OR kap OR bist) when:1d" if n_ticker == "Canlı Akış (Tüm Şirketler)" else f"{n_ticker.replace('.IS', '')} (hisse OR kap OR borsa)"
+    feed = feedparser.parse(f"https://news.google.com/rss/search?q={quote(q)}&hl=tr&gl=TR&ceid=TR:tr")
     
     if feed.entries:
         processed = []
@@ -260,7 +256,8 @@ with tab3:
         processed.sort(key=lambda x: x.sort_time, reverse=True)
         for e in processed[:20]:
             st.markdown(f"### [{e.title}]({e.link})")
-            st.caption(f"🕒 {e.sort_time.strftime('%d.%m.%Y %H:%M')} | {e.source.title}")
+            # Tarih ve Saat eklendi
+            st.caption(f"🕒 {e.sort_time.strftime('%d.%m.%Y %H:%M')} | 🏢 Kaynak: {e.source.title}")
             st.divider()
     else: st.info("Haber bulunamadı.")
 

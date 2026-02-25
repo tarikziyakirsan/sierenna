@@ -6,7 +6,7 @@ import feedparser
 from urllib.parse import quote
 
 # --- 1. SAYFA AYARLARI VE SIDEBAR'I TAMAMEN GİZLEME ---
-st.set_page_config(page_title="BIST Analiz Paneli", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="BIST Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
 
 # Sidebar'ı tamamen gizleyen CSS
 st.markdown("""
@@ -29,7 +29,7 @@ st.warning("⚠️ **Yasal Uyarı:** Bu uygulama bilgilendirme amaçlıdır. Ver
 
 st.markdown("---")
 
-# --- 3. HİSSE LİSTESİ ---
+# --- 3. HİSSE LİSTESİ (Tam ve Onarılmış Liste) ---
 bist_full_list = sorted(list(set([
     "A1CAP.IS", "ACSEL.IS", "ADEZ.IS", "ADESE.IS", "AEFES.IS", "AFYON.IS", "AGESA.IS", "AGHOL.IS", "AGROT.IS", "AHGAZ.IS",
     "AKBNK.IS", "AKCNS.IS", "AKENR.IS", "AKFGY.IS", "AKFYE.IS", "AKGRT.IS", "AKMGY.IS", "AKSA.IS", "AKSEN.IS", "ALARK.IS",
@@ -85,7 +85,7 @@ def fetch_master_data(tickers):
 # --- 4. SEKMELER ---
 tab1, tab2, tab3 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Haberler"])
 
-# --- TAB 1: PAZAR ANALİZİ ---
+# --- TAB 1: PAZAR ANALİZİ (GÜNCEL SİNYAL VE TEMİZ TABLO) ---
 with tab1:
     st.subheader("🔍 Tarama Ayarları")
     col1, col2 = st.columns([2, 1])
@@ -170,20 +170,20 @@ with tab2:
     edited_df = st.data_editor(st.session_state.portfolio_data, num_rows="dynamic", use_container_width=True, hide_index=True)
     st.session_state.portfolio_data = edited_df
 
-# --- TAB 3: HABERLER (GELİŞMİŞ MANTIK) ---
+# --- TAB 3: HABERLER (CANLI AKIŞ + SPESİFİK FİLTRE) ---
 with tab3:
-    st.subheader("📰 Borsa Haber Akışı")
+    st.subheader("📰 Canlı Haber Akışı")
     
-    # Haberler için seçenek listesine "Genel BIST Haberleri"ni en başa ekliyoruz
-    news_options = ["Genel BIST Haberleri"] + bist_full_list
-    news_ticker = st.selectbox("Hisse Seçin (Özel haber için seçin, genel akış için bırakın):", news_options, key="news_ticker")
+    # Haber başlıkları için seçenek listesi: En başa "Tüm Şirketler (Canlı Akış)" eklendi.
+    news_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
+    news_ticker = st.selectbox("İncelemek istediğiniz hisseyi seçin (Varsayılan: Genel Akış):", news_options, key="news_ticker")
     
-    # Arama sorgusunu belirleme
-    if news_ticker == "Genel BIST Haberleri":
-        # Hiçbir hisse seçilmediyse veya genel seçiliyse geniş kapsamlı bir sorgu yap
-        query_text = "Borsa İstanbul ekonomi borsa haberleri"
+    # Arama motoru mantığı
+    if news_ticker == "Canlı Akış (Tüm Şirketler)":
+        # Google News'te BIST'teki tüm hisse hareketlerini kapsayan geniş sorgu
+        query_text = "Borsa İstanbul hisse senedi son dakika haberleri"
     else:
-        # Belirli bir hisse seçildiyse ona odaklan
+        # Spesifik hisseye odaklanma
         hisse_sade = news_ticker.replace(".IS", "")
         query_text = f"{hisse_sade} hisse borsa"
     
@@ -191,13 +191,13 @@ with tab3:
     feed = feedparser.parse(rss_url)
     
     if feed.entries:
-        for entry in feed.entries[:10]:
+        for entry in feed.entries[:12]: # En güncel 12 haber
             with st.container():
                 st.markdown(f"### [{entry.title}]({entry.link})")
-                st.caption(f"📅 {entry.published} | 🏢 {entry.source.title}")
+                st.caption(f"📅 {entry.published} | 🏢 Kaynak: {entry.source.title}")
                 st.divider()
     else:
-        st.info("Şu an için uygun haber bulunamadı.")
+        st.info("Şu an için yeni bir haber akışı yakalanamadı.")
 
 st.markdown("---")
 st.caption("BIST Master Analiz Terminali | Google News & Yahoo Finance Entegrasyonu")

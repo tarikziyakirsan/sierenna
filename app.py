@@ -26,12 +26,20 @@ st.markdown("""
 
 # --- 2. BAŞLIK VE YASAL UYARI ---
 st.title("📊 BIST Analiz Terminali")
-# app.py içindeki ilgili kısmı bununla değiştirebilirsin
 st.markdown("""
-    <div style="background-color:#fff3cd; padding:15px; border-radius:10px; border:1px solid #ffeeba;">
-        <h4 style="color:#856404; margin-top:0;">⚠️ Yasal Bilgilendirme</h4>
-        <p style="color:#856404; font-size:14px;">
-            Bu terminaldeki veriler bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. 
+    <div style="
+        background-color: #ffca28; 
+        padding: 20px; 
+        border-radius: 12px; 
+        border: 2px solid #f57f17; 
+        width: 70%; 
+        margin: 20px auto; 
+        text-align: center;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+    ">
+        <h4 style="color: #5d4037; margin-top: 0; font-size: 20px;">⚠️ Yasal Bilgilendirme</h4>
+        <p style="color: #5d4037; font-size: 16px; font-weight: 500; margin-bottom: 0;">
+            Bu terminaldeki veriler bilgilendirme amaçlıdır ve yatırım tavsiyesi değildir. <br>
             Veriler gecikmeli olabilir; tüm risk ve sorumluluk kullanıcıya aittir.
         </p>
     </div>

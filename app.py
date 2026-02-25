@@ -4,32 +4,27 @@ import pandas as pd
 import pandas_ta as ta
 import feedparser
 from urllib.parse import quote
+from datetime import datetime
+from email.utils import parsedate_to_datetime
 
-# --- 1. SAYFA AYARLARI VE SIDEBAR'I TAMAMEN GİZLEME ---
+# --- 1. SAYFA AYARLARI ---
 st.set_page_config(page_title="BIST Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
 
-# Sidebar'ı tamamen gizleyen CSS
+# Sidebar'ı gizleyen CSS
 st.markdown("""
     <style>
         [data-testid="stSidebar"], [data-testid="stSidebarNav"], .css-1dp56ee, .css-yk4q2l {
             display: none !important;
         }
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
         .stApp { margin-left: 0px; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- 2. BAŞLIK VE YASAL UYARI ---
 st.title("📊 BIST Analiz Paneli")
-st.write("Teknik Momentum, Temel Değerleme ve Performans Denetimi")
+st.warning("⚠️ **Yasal Uyarı:** Veriler yatırım tavsiyesi değildir. Risk kullanıcıya aittir.")
 
-st.warning("⚠️ **Yasal Uyarı:** Bu uygulama bilgilendirme amaçlıdır. Veriler ve skorlar kesinlikle yatırım tavsiyesi değildir. Piyasa verileri gecikmeli olabilir. Risk tamamen kullanıcıya aittir.")
-
-st.markdown("---")
-
-# --- 3. HİSSE LİSTESİ (Tam ve Onarılmış Liste) ---
+# --- 3. HİSSE LİSTESİ ---
 bist_full_list = sorted(list(set([
     "A1CAP.IS", "ACSEL.IS", "ADEZ.IS", "ADESE.IS", "AEFES.IS", "AFYON.IS", "AGESA.IS", "AGHOL.IS", "AGROT.IS", "AHGAZ.IS",
     "AKBNK.IS", "AKCNS.IS", "AKENR.IS", "AKFGY.IS", "AKFYE.IS", "AKGRT.IS", "AKMGY.IS", "AKSA.IS", "AKSEN.IS", "ALARK.IS",
@@ -85,7 +80,7 @@ def fetch_master_data(tickers):
 # --- 4. SEKMELER ---
 tab1, tab2, tab3 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Haberler"])
 
-# --- TAB 1: PAZAR ANALİZİ (GÜNCEL SİNYAL VE TEMİZ TABLO) ---
+# --- TAB 1: PAZAR ANALİZİ ---
 with tab1:
     st.subheader("🔍 Tarama Ayarları")
     col1, col2 = st.columns([2, 1])
@@ -106,19 +101,15 @@ with tab1:
                 status_text.text(f"Analiz ediliyor: {ticker} ({i+1}/{total_tickers})")
                 df = raw_data[ticker].copy().dropna()
                 if len(df) < 130: continue
-
                 cp = df['Close'].iloc[-1]
                 prev_p = df['Close'].iloc[-2]
                 day_chg = ((cp - prev_p) / prev_p) * 100
                 ret_1m = ((cp - df['Close'].iloc[-22]) / df['Close'].iloc[-22]) * 100
-                
                 df['RSI'] = ta.rsi(df['Close'], length=14)
                 rsi = df['RSI'].iloc[-1]
                 sma50 = ta.sma(df['Close'], length=50).iloc[-1]
-                
                 info = yf.Ticker(ticker).info
                 fk = info.get('trailingPE', None)
-
                 skor = 0
                 if 30 < rsi < 45: skor += 20
                 if cp > sma50: skor += 20
@@ -145,7 +136,6 @@ with tab1:
         final_df = res_df[res_df['Skor'] >= score_threshold].sort_values(by=["Skor"], ascending=False)
         st.success(f"Şartları sağlayan {len(final_df)} hisse bulundu.")
         st.dataframe(final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), use_container_width=True, hide_index=True)
-        
         csv = final_df.to_csv(index=False).encode('utf-8')
         st.download_button("Sonuçları İndir (CSV)", csv, "bist_analiz_sonuclari.csv", "text/csv")
     
@@ -170,34 +160,48 @@ with tab2:
     edited_df = st.data_editor(st.session_state.portfolio_data, num_rows="dynamic", use_container_width=True, hide_index=True)
     st.session_state.portfolio_data = edited_df
 
-# --- TAB 3: HABERLER (CANLI AKIŞ + SPESİFİK FİLTRE) ---
+# --- TAB 3: CANLI HABER TERMİNALİ (AKILLI SIRALAMA) ---
 with tab3:
-    st.subheader("📰 Canlı Haber Akışı")
+    st.subheader("📰 Canlı Haber Terminali")
     
-    # Haber başlıkları için seçenek listesi: En başa "Tüm Şirketler (Canlı Akış)" eklendi.
     news_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
-    news_ticker = st.selectbox("İncelemek istediğiniz hisseyi seçin (Varsayılan: Genel Akış):", news_options, key="news_ticker")
+    news_ticker = st.selectbox("Hisse Filtrele:", news_options, key="news_ticker")
     
-    # Arama motoru mantığı
+    # Haber Sorgusunu Güçlendirme: Hisse + KAP + Borsa birleşimi
     if news_ticker == "Canlı Akış (Tüm Şirketler)":
-        # Google News'te BIST'teki tüm hisse hareketlerini kapsayan geniş sorgu
-        query_text = "Borsa İstanbul hisse senedi son dakika haberleri"
+        query_text = "(hisse OR borsa OR kap OR bist) when:1d"
     else:
-        # Spesifik hisseye odaklanma
         hisse_sade = news_ticker.replace(".IS", "")
-        query_text = f"{hisse_sade} hisse borsa"
+        query_text = f"{hisse_sade} (hisse OR kap OR borsa)"
     
     rss_url = f"https://news.google.com/rss/search?q={quote(query_text)}&hl=tr&gl=TR&ceid=TR:tr"
     feed = feedparser.parse(rss_url)
     
+    # HABERLERİ TARİHE GÖRE SIRALAMA MANTIĞI
     if feed.entries:
-        for entry in feed.entries[:12]: # En güncel 12 haber
+        # Her habere gerçek bir datetime objesi ekliyoruz
+        processed_entries = []
+        for entry in feed.entries:
+            try:
+                # RFC 822 formatındaki tarihi Python datetime'a çevir
+                entry_dt = parsedate_to_datetime(entry.published)
+                entry.sort_time = entry_dt
+                processed_entries.append(entry)
+            except:
+                continue
+        
+        # En yeniden en eskiye (Descending) sırala
+        processed_entries.sort(key=lambda x: x.sort_time, reverse=True)
+        
+        for entry in processed_entries[:15]:
             with st.container():
+                # Tarihi Türkiye formatında yazdır (25 Feb 2026 14:30 gibi)
+                clean_date = entry.sort_time.strftime("%d %b %Y %H:%M")
                 st.markdown(f"### [{entry.title}]({entry.link})")
-                st.caption(f"📅 {entry.published} | 🏢 Kaynak: {entry.source.title}")
+                st.caption(f"🕒 **{clean_date}** | 🏢 Kaynak: {entry.source.title}")
                 st.divider()
     else:
-        st.info("Şu an için yeni bir haber akışı yakalanamadı.")
+        st.info("Son 24 saat içinde yeni bir haber akışı bulunamadı.")
 
 st.markdown("---")
-st.caption("BIST Master Analiz Terminali | Google News & Yahoo Finance Entegrasyonu")
+st.caption(f"BIST Master Analiz Terminali | Son Güncelleme: {datetime.now().strftime('%d.%m.%Y %H:%M')}")

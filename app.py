@@ -18,6 +18,8 @@ st.markdown("""
         [data-testid="stSidebar"], [data-testid="stSidebarNav"] {display: none !important;}
         .stApp { margin-left: 0px; }
         .stDataFrame {border: 1px solid #f0f2f6; border-radius: 10px;}
+        /* Spinner/Running yazılarını tamamen gizle */
+        .stStatusWidget {display: none !important;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -85,7 +87,8 @@ bist_full_list = sorted(list(set([
     "YKBNK.IS", "YONGA.IS", "YOTAS.IS", "YUNSA.IS", "YYLGD.IS", "ZEDUR.IS", "ZOREN.IS", "ZRGYO.IS"
 ])))
 
-@st.cache_data(ttl=3600)
+# --- FETCH DATASI (Spinnner Kapalı) ---
+@st.cache_data(ttl=3600, show_spinner=False)
 def fetch_master_data(tickers):
     return yf.download(tickers, period="1y", interval="1d", group_by='ticker', progress=False)
 
@@ -154,16 +157,14 @@ with tab1:
         status_text.text("Analiz Tamamlandı!")
         st.session_state.analysis_results = pd.DataFrame(results)
 
-    # --- TABLO GÖSTERİMİ (NAMEERROR ÇÖZÜLDÜ) ---
+    # --- TABLO GÖSTERİMİ ---
     if st.session_state.analysis_results is not None:
         df_res = st.session_state.analysis_results.copy()
-        
-        # Sadece skor eşiğine göre filtrele
         final_df = df_res[df_res["Skor"] >= score_threshold]
         
-        st.success(f"Filtreye uygun {len(final_df)} hisse listeleniyor. (Tablo içinden arama ve süzme yapabilirsiniz)")
+        st.success(f"Filtreye uygun {len(final_df)} hisse listeleniyor. (Tablo içinden arama yapabilirsiniz)")
         
-        # Görseldeki gereksiz ondalıkları ve tabloyu düzelten gösterim
+        # Sütun ayarları ile gereksiz ondalıklardan kurtuluyoruz
         st.dataframe(
             final_df.sort_values(by="Skor", ascending=False),
             use_container_width=True,
@@ -172,8 +173,10 @@ with tab1:
                 "Skor": st.column_config.ProgressColumn("Skor", min_value=0, max_value=100, format="%d"),
                 "Fiyat": st.column_config.NumberColumn("Fiyat", format="%.2f TL"),
                 "Günlük %": st.column_config.NumberColumn("Günlük %", format="%.2f"),
+                "1A %": st.column_config.NumberColumn("1A %", format="%.1f"),
                 "3A %": st.column_config.NumberColumn("3A %", format="%.1f"),
-                "6A %": st.column_config.NumberColumn("6A %", format="%.1f")
+                "6A %": st.column_config.NumberColumn("6A %", format="%.1f"),
+                "RSI": st.column_config.NumberColumn("RSI", format="%.1f")
             }
         )
 
@@ -214,6 +217,7 @@ with tab2:
         df_p = pd.DataFrame(st.session_state.my_portfolio)
         unique_stocks = df_p['Hisse'].unique().tolist()
         try:
+            # Buradaki download spinner'ı engellemek için progress=False zaten var
             price_data = yf.download(unique_stocks, period="1d", interval="1m", progress=False)['Close'].iloc[-1]
             def calculate_row(row):
                 curr_p = price_data[row['Hisse']] if len(unique_stocks) > 1 else price_data
@@ -234,7 +238,7 @@ with tab2:
                 st.rerun()
         except: st.warning("Fiyat verileri bekleniyor...")
 
-# --- TAB 3: HABERLER (TARİH + SAAT EKLENDİ) ---
+# --- TAB 3: HABERLER ---
 with tab3:
     st.subheader("📰 Canlı Haber Terminali")
     news_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
@@ -259,7 +263,6 @@ with tab3:
         for entry in processed_entries[:20]:
             with st.container():
                 st.markdown(f"### [{entry.title}]({entry.link})")
-                # Saat yanına tarih eklendi
                 clean_date = entry.sort_time.strftime("%d.%m.%Y %H:%M")
                 st.caption(f"🕒 {clean_date} | 🏢 Kaynak: {entry.source.title}")
                 st.divider()

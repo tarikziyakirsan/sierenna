@@ -6,6 +6,13 @@ import feedparser
 from urllib.parse import quote
 from datetime import datetime
 from email.utils import parsedate_to_datetime
+import pytz # Saat dilimi için gerekli
+
+# Türkiye saat dilimini tanımla
+TR_SAAT_DILIMI = pytz.timezone('Europe/Istanbul')
+
+# Saati çekerken bu dilimi kullan
+guncel_zaman = datetime.now(TR_SAAT_DILIMI).strftime('%d.%m.%Y %H:%M')
 
 # --- 1. SAYFA AYARLARI ---
 st.set_page_config(page_title="BIST Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")

@@ -11,10 +11,8 @@ from email.utils import parsedate_to_datetime
 # --- 1. SAYFA AYARLARI VE TASARIM ---
 st.set_page_config(page_title="BIST Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
 
-# Türkiye Saat Dilimi
 TR_TZ = pytz.timezone('Europe/Istanbul')
 
-# Sidebar Gizleme ve Genel Stil
 st.markdown("""
     <style>
         [data-testid="stSidebar"], [data-testid="stSidebarNav"] {display: none !important;}
@@ -23,24 +21,18 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. BAŞLIK VE KÜÇÜK YASAL UYARI ---
+# --- 2. BAŞLIK VE YASAL UYARI ---
 st.title("📊 BIST Analiz Terminali")
 
 st.markdown("""
     <div style="
-        background-color: #ffca28; 
-        color: #5d4037; 
-        padding: 8px 20px; 
-        border-radius: 50px; 
-        border: 1px solid #f57f17; 
-        width: fit-content; 
-        margin: 0 auto 20px auto; 
-        font-size: 14px; 
-        font-weight: 500;
-        text-align: center;
-        box-shadow: 0px 2px 5px rgba(0,0,0,0.1);
+        background-color: #ffca28; color: #4e342e; padding: 10px 30px; border-radius: 50px; 
+        border: 1px solid #f57f17; width: fit-content; margin: 0 auto 20px auto; 
+        font-size: 14.5px; font-weight: 500; text-align: center; line-height: 1.4;
+        box-shadow: 0px 4px 8px rgba(0,0,0,0.1);
     ">
-        <strong>⚠️ Yasal Bilgilendirme:</strong> Bu terminaldeki tüm veri ve analizler yatırım tavsiyesi değildir ve profesyonel bir kullanım amacı taşımamaktadır. Buradaki bilgilere dayanılarak alınan kararların sorumluluğu tamamen kullanıcıya aittir.
+        ⚠️ <strong>Bilgilendirme:</strong> Bu terminaldeki veri ve analizler yatırım tavsiyesi değildir ve profesyonel bir kullanım amacı taşımamaktadır. 
+        Tüm sorumluluğun kullanıcıya ait olduğunu hatırlatmak isteriz.
     </div>
 """, unsafe_allow_html=True)
 
@@ -95,7 +87,8 @@ bist_full_list = sorted(list(set([
 
 @st.cache_data(ttl=3600)
 def fetch_master_data(tickers):
-    return yf.download(tickers, period="10mo", interval="1d", group_by='ticker', progress=False)
+    # 3 ve 6 aylık verileri kapsamak için 1 yıllık veri çekiyoruz
+    return yf.download(tickers, period="1y", interval="1d", group_by='ticker', progress=False)
 
 # --- 4. SEKMELER ---
 tab1, tab2, tab3 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Haberler"])
@@ -109,6 +102,9 @@ with tab1:
     with col2:
         start_button = st.button("Analizi Başlat / Güncelle", use_container_width=True)
 
+    if "analysis_results" not in st.session_state:
+        st.session_state.analysis_results = None
+
     if start_button:
         raw_data = fetch_master_data(bist_full_list)
         results = []
@@ -121,21 +117,29 @@ with tab1:
                 status_text.text(f"Analiz ediliyor: {ticker} ({i+1}/{total_tickers})")
                 df = raw_data[ticker].copy().dropna()
                 if len(df) < 130: continue
+                
                 cp = df['Close'].iloc[-1]
                 prev_p = df['Close'].iloc[-2]
+                
+                # Değişim Hesaplamaları
                 day_chg = ((cp - prev_p) / prev_p) * 100
                 ret_1m = ((cp - df['Close'].iloc[-22]) / df['Close'].iloc[-22]) * 100
+                ret_3m = ((cp - df['Close'].iloc[-66]) / df['Close'].iloc[-66]) * 100 if len(df) > 66 else 0
+                ret_6m = ((cp - df['Close'].iloc[-126]) / df['Close'].iloc[-126]) * 100 if len(df) > 126 else 0
+                
+                # Teknik Göstergeler
                 df['RSI'] = ta.rsi(df['Close'], length=14)
                 rsi = df['RSI'].iloc[-1]
                 sma50 = ta.sma(df['Close'], length=50).iloc[-1]
-                info = yf.Ticker(ticker).info
-                fk = info.get('trailingPE', None)
+                
+                # Skorlama
                 skor = 0
                 if 30 < rsi < 45: skor += 20
                 if cp > sma50: skor += 20
-                if fk and 0 < fk < 15: skor += 30
                 if ret_1m > 0: skor += 30
+                if day_chg > 0: skor += 30
 
+                # Sinyal Mantığı
                 if day_chg >= 9.5: sinyal = "🚀 TAVAN"
                 elif rsi < 30: sinyal = "💎 GÜÇLÜ AL"
                 elif rsi > 70: sinyal = "🔥 GÜÇLÜ SAT"
@@ -146,18 +150,40 @@ with tab1:
                 results.append({
                     "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
                     "Günlük %": round(day_chg, 2), "1A %": round(ret_1m, 1),
-                    "RSI": round(rsi, 1), "F/K": round(fk, 1) if fk else "N/A", "Skor": skor, "Sinyal": sinyal
+                    "3A %": round(ret_3m, 1), "6A %": round(ret_6m, 1),
+                    "RSI": round(rsi, 1), "Skor": skor, "Sinyal": sinyal
                 })
                 progress_bar.progress((i + 1) / total_tickers)
             except: continue
 
         status_text.text("Analiz Tamamlandı!")
-        res_df = pd.DataFrame(results)
-        final_df = res_df[res_df['Skor'] >= score_threshold].sort_values(by=["Skor"], ascending=False)
-        st.success(f"Şartları sağlayan {len(final_df)} hisse bulundu.")
-        st.dataframe(final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), use_container_width=True, hide_index=True)
+        st.session_state.analysis_results = pd.DataFrame(results)
 
-    # --- EKLEME: GRAFİK TABLOSU ---
+    # --- FİLTRELEME VE GÖSTERİM ---
+    if st.session_state.analysis_results is not None:
+        df_res = st.session_state.analysis_results.copy()
+        
+        # Sinyal Filtresi (Multiselect)
+        st.markdown("---")
+        col_f1, col_f2 = st.columns([2,1])
+        with col_f1:
+            all_signals = df_res["Sinyal"].unique().tolist()
+            selected_signals = st.multiselect("Sinyale Göre Filtrele:", options=all_signals, default=all_signals)
+        
+        # Filtreyi Uygula
+        filtered_df = df_res[
+            (df_res["Skor"] >= score_threshold) & 
+            (df_res["Sinyal"].isin(selected_signals))
+        ].sort_values(by=["Skor"], ascending=False)
+        
+        st.success(f"Şartları sağlayan {len(filtered_df)} hisse bulundu.")
+        st.dataframe(
+            filtered_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), 
+            use_container_width=True, 
+            hide_index=True
+        )
+
+    # --- GRAFİK BÖLÜMÜ ---
     st.markdown("---")
     st.subheader("📈 Hisse Teknik Grafik İnceleme")
     selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
@@ -174,7 +200,6 @@ with tab1:
 # --- TAB 2: PORTFÖYÜM ---
 with tab2:
     st.subheader("💼 Portföy Yönetimi")
-    
     if 'my_portfolio' not in st.session_state:
         st.session_state.my_portfolio = []
 
@@ -186,7 +211,6 @@ with tab2:
             lot = st.number_input("Adet", min_value=1, value=1)
         with c3:
             maliyet = st.number_input("Maliyet (TL)", min_value=0.0, value=0.0, step=0.01)
-        
         if st.button("Listeye Ekle", use_container_width=True):
             if selected_stock:
                 st.session_state.my_portfolio.append({"Hisse": selected_stock, "Adet": lot, "Maliyet": maliyet})
@@ -195,10 +219,8 @@ with tab2:
     if st.session_state.my_portfolio:
         df_p = pd.DataFrame(st.session_state.my_portfolio)
         unique_stocks = df_p['Hisse'].unique().tolist()
-        
         try:
             price_data = yf.download(unique_stocks, period="1d", interval="1m", progress=False)['Close'].iloc[-1]
-            
             def calculate_row(row):
                 curr_p = price_data[row['Hisse']] if len(unique_stocks) > 1 else price_data
                 total_val = curr_p * row['Adet']
@@ -206,65 +228,41 @@ with tab2:
                 pl = total_val - total_cost
                 pl_perc = (pl / total_cost * 100) if total_cost > 0 else 0
                 return pd.Series([round(curr_p, 2), round(total_val, 2), round(pl, 2), round(pl_perc, 2)])
-
             df_p[['Güncel Fiyat', 'Toplam Değer', 'Kâr/Zarar', 'Değişim %']] = df_p.apply(calculate_row, axis=1)
-            
             m1, m2 = st.columns(2)
-            m1.metric("Toplam Portföy Değeri", f"{df_p['Toplam Değer'].sum():,.2f} TL")
-            net_pl = df_p['Kâr/Zarar'].sum()
-            m2.metric("Toplam Net Kâr/Zarar", f"{net_pl:,.2f} TL", delta=f"{net_pl:,.2f}")
-
-            def color_pl(val):
-                color = 'green' if val > 0 else 'red' if val < 0 else 'black'
-                return f'color: {color}'
-
-            st.dataframe(df_p.style.applymap(color_pl, subset=['Kâr/Zarar', 'Değişim %']), use_container_width=True, hide_index=True)
-            
-            if st.button("Portföyü Sıfırla"):
+            m1.metric("Toplam Değer", f"{df_p['Toplam Değer'].sum():,.2f} TL")
+            m2.metric("Toplam K/Z", f"{df_p['Kâr/Zarar'].sum():,.2f} TL", delta=f"{df_p['Kâr/Zarar'].sum():,.2f}")
+            st.dataframe(df_p, use_container_width=True, hide_index=True)
+            if st.button("Sıfırla"):
                 st.session_state.my_portfolio = []
                 st.rerun()
-        except:
-            st.warning("Fiyat verileri alınamadı.")
-    else:
-        st.info("Portföyünüz henüz boş.")
+        except: st.warning("Fiyat verileri alınamadı.")
 
-# --- TAB 3: CANLI HABER TERMİNALİ (TARİH GÜNCELLEMELİ) ---
+# --- TAB 3: HABERLER ---
 with tab3:
     st.subheader("📰 Canlı Haber Terminali")
-    
     news_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
     news_ticker = st.selectbox("Hisse Filtrele:", news_options, key="news_filter_box")
     
-    if news_ticker == "Canlı Akış (Tüm Şirketler)":
-        query_text = "(hisse OR borsa OR kap OR bist) when:1d"
-    else:
-        hisse_sade = news_ticker.replace(".IS", "")
-        query_text = f"{hisse_sade} (hisse OR kap OR borsa)"
+    query_text = "(hisse OR borsa OR kap OR bist) when:1d" if news_ticker == "Canlı Akış (Tüm Şirketler)" else f"{news_ticker.replace('.IS', '')} (hisse OR kap OR borsa)"
     
     rss_url = f"https://news.google.com/rss/search?q={quote(query_text)}&hl=tr&gl=TR&ceid=TR:tr"
     feed = feedparser.parse(rss_url)
     
     if feed.entries:
-        processed_entries = []
-        for entry in feed.entries:
+        processed = []
+        for e in feed.entries:
             try:
-                utc_dt = parsedate_to_datetime(entry.published)
-                tr_dt = utc_dt.astimezone(TR_TZ)
-                entry.sort_time = tr_dt
-                processed_entries.append(entry)
+                dt = parsedate_to_datetime(e.published).astimezone(TR_TZ)
+                e.sort_time = dt
+                processed.append(e)
             except: continue
-        
-        processed_entries.sort(key=lambda x: x.sort_time, reverse=True)
-        
-        for entry in processed_entries[:20]:
-            with st.container():
-                st.markdown(f"### [{entry.title}]({entry.link})")
-                # GÜNCELLEME: Saat yanına tarih eklendi (%d.%m.%Y)
-                clean_date = entry.sort_time.strftime("%d.%m.%Y %H:%M")
-                st.caption(f"🕒 {clean_date} | 🏢 Kaynak: {entry.source.title}")
-                st.divider()
-    else:
-        st.info("Haber bulunamadı.")
+        processed.sort(key=lambda x: x.sort_time, reverse=True)
+        for e in processed[:20]:
+            st.markdown(f"### [{e.title}]({e.link})")
+            st.caption(f"🕒 {e.sort_time.strftime('%d.%m.%Y %H:%M')} | {e.source.title}")
+            st.divider()
+    else: st.info("Haber bulunamadı.")
 
 # --- ALT BİLGİ ---
 st.markdown("---")

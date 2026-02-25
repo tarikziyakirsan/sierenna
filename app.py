@@ -4,9 +4,9 @@ import pandas as pd
 import pandas_ta as ta
 
 # --- 1. SAYFA AYARLARI VE SIDEBAR'I TAMAMEN GİZLEME ---
-st.set_page_config(page_title="BIST Master Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Bist Master Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
 
-# Sidebar'ı ve açılır kapanır oku tamamen ortadan kaldıran CSS
+# Sidebar'ı ve açma okunu tamamen kaldıran CSS
 st.markdown("""
     <style>
         [data-testid="stSidebar"], [data-testid="stSidebarNav"], .css-1dp56ee, .css-yk4q2l {
@@ -19,16 +19,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. BAŞLIK VE ESKİ SARI UYARI YAZISI ---
+# --- 2. ANA BAŞLIK VE SARI UYARI METNİ ---
+st.title("📊 Bist Master Analiz Terminali")
 
-# Sayfa Yapılandırması
-st.set_page_config(page_title="BIST Tüm Evren Analizi", layout="wide")
-
-st.title("📊 BIST Tüm Şirketler Master Analiz Paneli")
-st.write("Teknik Momentum, Temel Değerleme ve Performans Denetimi")
-
-# Yasal Uyarı Bölümü
-st.warning("⚠️ **Yasal Uyarı:** Bu uygulama bilgilendirme amaçlıdır. Burada yer alan veriler, analizler ve skorlar kesinlikle **yatırım tavsiyesi değildir.** Piyasa verileri gecikmeli olabilir ve analiz sonuçları hata payı içerebilir. Yapılan tüm işlemlerin riski ve sorumluluğu tamamen kullanıcıya aittir.")
+# İstediğin o sarı fontlu yasal uyarı metni
+st.warning("""
+**YASAL UYARI:** Bu uygulama bilgilendirme amaçlıdır. Burada yer alan veriler, analizler ve skorlar kesinlikle yatırım tavsiyesi değildir. 
+Piyasa verileri gecikmeli olabilir ve analiz sonuçları hata payı içerebilir. Yapılan tüm işlemlerin riski ve sorumluluğu tamamen kullanıcıya aittir.
+""")
 
 st.markdown("---")
 
@@ -86,14 +84,14 @@ def fetch_master_data(tickers):
     return yf.download(tickers, period="10mo", interval="1d", group_by='ticker', progress=False)
 
 # --- 4. SEKMELER ---
-tab1, tab2, tab3 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Haberler & Detay"])
+tab1, tab2, tab3 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Haberler"])
 
 # --- TAB 1: PAZAR ANALİZİ ---
 with tab1:
     # "Global" kelimesi kaldırıldı
     st.subheader("🔥 BIST Taraması")
     
-    # Skor eşiği ve buton (vibe filter yazısı kaldırıldı)
+    # "vibe filter" yazısı kaldırıldı
     score_threshold = st.slider("🎯 Minimum skor eşiği", 0, 100, 50)
     
     if st.button("🔄 Analizi Başlat / Güncelle"):
@@ -118,7 +116,6 @@ with tab1:
                 rsi = df['RSI'].iloc[-1]
                 sma50 = ta.sma(df['Close'], length=50).iloc[-1]
                 
-                # Sektör bilgisi kaldırıldı, sadece temel finansal veri
                 info = yf.Ticker(ticker).info
                 fk = info.get('trailingPE', None)
 
@@ -138,7 +135,27 @@ with tab1:
             
         res_df = pd.DataFrame(results)
         final_df = res_df[res_df['Skor'] >= score_threshold].sort_values(by="Skor", ascending=False)
+        
+        # Tarama Sonuçları Tablosu
         st.dataframe(final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), use_container_width=True)
+
+        # --- TAŞINAN GRAFİK BÖLÜMÜ (Artık Tarama Tablosunun Altında) ---
+        if not final_df.empty:
+            st.divider()
+            st.subheader("📈 Hisse Teknik Analiz Grafiği")
+            selected_plot = st.selectbox("Grafiğini incelemek istediğiniz hisseyi seçin:", final_df['Hisse'].tolist(), key="market_chart")
+            
+            if selected_plot:
+                ticker_full = f"{selected_plot}.IS"
+                plot_data = yf.download(ticker_full, period="1y", interval="1d", progress=False)
+                if not plot_data.empty:
+                    plot_data['SMA50'] = ta.sma(plot_data['Close'], length=50)
+                    plot_data['SMA200'] = ta.sma(plot_data['Close'], length=200)
+                    chart_df = plot_data[['Close', 'SMA50', 'SMA200']].tail(150)
+                    st.line_chart(chart_df)
+                    st.info(f"**{selected_plot}** hissesinin son 150 günlük fiyat ve hareketli ortalama grafiği.")
+        else:
+            st.warning("Belirlenen kriterlere uygun hisse bulunamadı.")
     else:
         st.info("Pazar taramasını başlatmak için 'Analizi Başlat' butonuna tıklayın.")
 
@@ -169,30 +186,18 @@ with tab2:
             st.metric("Net Durum", f"{total:,.2f} TL", delta=f"{total:,.2f} TL")
             if total > 0: st.balloons()
 
-# --- TAB 3: HABERLER & GRAFİK ---
+# --- TAB 3: SADECE HABERLER ---
 with tab3:
-    st.subheader("📈 Hisse Detay Analizi")
-    selected_ticker = st.selectbox("Hisse Seçin:", bist_full_list, key="detail_select")
-
-    if selected_ticker:
-        try:
-            hisse_obj = yf.Ticker(selected_ticker)
-            # Grafik
-            detail_data = hisse_obj.history(period="2y")
-            if not detail_data.empty:
-                detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
-                detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
-                plot_df = detail_data[['Close', 'SMA50', 'SMA200']].tail(130).dropna()
-                st.line_chart(plot_df)
-            
-            # Haberler
-            st.markdown("---")
-            st.write("📰 **Son Haberler**")
-            news = hisse_obj.news
-            for item in news[:3]:
+    st.subheader("📰 Güncel Haberler")
+    selected_h = st.selectbox("Haberlerini görmek istediğiniz hisseyi seçin:", bist_full_list, key="news_only")
+    if selected_h:
+        h_obj = yf.Ticker(selected_h)
+        news = h_obj.news
+        if news:
+            for item in news[:5]:
                 st.write(f"🔗 **[{item['title']}]({item['link']})**")
-        except Exception as e:
-            st.error(f"Veri yüklenirken hata: {e}")
+        else:
+            st.write("Bu hisse için yakın zamanda haber bulunamadı.")
 
 st.markdown("---")
-st.caption("BIST Master Analiz Terminali | Veriler teknik momentum ve temel analiz çarpanları ile hesaplanır.")
+st.caption("BIST Master Analiz Terminali | Teknik Momentum ve Temel Analiz Çarpanları")

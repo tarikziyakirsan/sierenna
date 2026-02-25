@@ -6,9 +6,9 @@ import feedparser
 from urllib.parse import quote
 
 # --- 1. SAYFA AYARLARI VE SIDEBAR'I TAMAMEN GİZLEME ---
-st.set_page_config(page_title="BIST Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="BIST Analiz Paneli", layout="wide", initial_sidebar_state="collapsed")
 
-# Sidebar'ı ve ok butonunu tamamen kaldıran CSS
+# Sidebar'ı tamamen gizleyen CSS
 st.markdown("""
     <style>
         [data-testid="stSidebar"], [data-testid="stSidebarNav"], .css-1dp56ee, .css-yk4q2l {
@@ -25,11 +25,11 @@ st.markdown("""
 st.title("📊 BIST Analiz Paneli")
 st.write("Teknik Momentum, Temel Değerleme ve Performans Denetimi")
 
-st.warning("⚠️ **Yasal Uyarı:** Bu uygulama bilgilendirme amaçlıdır. Burada yer alan veriler, analizler ve skorlar kesinlikle yatırım tavsiyesi değildir. Piyasa verileri gecikmeli olabilir ve analiz sonuçları hata payı içerebilir. Yapılan tüm işlemlerin riski ve sorumluluğu tamamen kullanıcıya aittir.")
+st.warning("⚠️ **Yasal Uyarı:** Bu uygulama bilgilendirme amaçlıdır. Veriler ve skorlar kesinlikle yatırım tavsiyesi değildir. Piyasa verileri gecikmeli olabilir. Risk tamamen kullanıcıya aittir.")
 
 st.markdown("---")
 
-# --- 3. HİSSE LİSTESİ (Eksiksiz ve Onarılmış Liste) ---
+# --- 3. HİSSE LİSTESİ ---
 bist_full_list = sorted(list(set([
     "A1CAP.IS", "ACSEL.IS", "ADEZ.IS", "ADESE.IS", "AEFES.IS", "AFYON.IS", "AGESA.IS", "AGHOL.IS", "AGROT.IS", "AHGAZ.IS",
     "AKBNK.IS", "AKCNS.IS", "AKENR.IS", "AKFGY.IS", "AKFYE.IS", "AKGRT.IS", "AKMGY.IS", "AKSA.IS", "AKSEN.IS", "ALARK.IS",
@@ -107,7 +107,6 @@ with tab1:
                 df = raw_data[ticker].copy().dropna()
                 if len(df) < 130: continue
 
-                # Teknik & Momentum
                 cp = df['Close'].iloc[-1]
                 prev_p = df['Close'].iloc[-2]
                 day_chg = ((cp - prev_p) / prev_p) * 100
@@ -120,14 +119,12 @@ with tab1:
                 info = yf.Ticker(ticker).info
                 fk = info.get('trailingPE', None)
 
-                # Skorlama
                 skor = 0
                 if 30 < rsi < 45: skor += 20
                 if cp > sma50: skor += 20
                 if fk and 0 < fk < 15: skor += 30
                 if ret_1m > 0: skor += 30
 
-                # Sinyal Mekanizması
                 if day_chg >= 9.5: sinyal = "🚀 TAVAN"
                 elif rsi < 30: sinyal = "💎 GÜÇLÜ AL"
                 elif rsi > 70: sinyal = "🔥 GÜÇLÜ SAT"
@@ -136,14 +133,9 @@ with tab1:
                 else: sinyal = "⚠️ SAT"
 
                 results.append({
-                    "Hisse": ticker.replace(".IS", ""), 
-                    "Fiyat": round(cp, 2),
-                    "Günlük %": round(day_chg, 2), 
-                    "1A %": round(ret_1m, 1),
-                    "RSI": round(rsi, 1), 
-                    "F/K": round(fk, 1) if fk else "N/A", 
-                    "Skor": skor,
-                    "Sinyal": sinyal
+                    "Hisse": ticker.replace(".IS", ""), "Fiyat": round(cp, 2),
+                    "Günlük %": round(day_chg, 2), "1A %": round(ret_1m, 1),
+                    "RSI": round(rsi, 1), "F/K": round(fk, 1) if fk else "N/A", "Skor": skor, "Sinyal": sinyal
                 })
                 progress_bar.progress((i + 1) / total_tickers)
             except: continue
@@ -151,13 +143,8 @@ with tab1:
         status_text.text("Analiz Tamamlandı!")
         res_df = pd.DataFrame(results)
         final_df = res_df[res_df['Skor'] >= score_threshold].sort_values(by=["Skor"], ascending=False)
-        
         st.success(f"Şartları sağlayan {len(final_df)} hisse bulundu.")
-        st.dataframe(
-            final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), 
-            use_container_width=True, 
-            hide_index=True
-        )
+        st.dataframe(final_df.style.background_gradient(subset=['Skor'], cmap='RdYlGn'), use_container_width=True, hide_index=True)
         
         csv = final_df.to_csv(index=False).encode('utf-8')
         st.download_button("Sonuçları İndir (CSV)", csv, "bist_analiz_sonuclari.csv", "text/csv")
@@ -165,7 +152,6 @@ with tab1:
     st.markdown("---")
     st.subheader("📈 Hisse Teknik Grafik İnceleme")
     selected_ticker = st.selectbox("Grafiğini görmek istediğiniz hisseyi seçin:", bist_full_list, key="detail_select")
-
     if selected_ticker:
         try:
             hisse_obj = yf.Ticker(selected_ticker)
@@ -174,40 +160,44 @@ with tab1:
                 detail_data['SMA50'] = ta.sma(detail_data['Close'], length=50)
                 detail_data['SMA200'] = ta.sma(detail_data['Close'], length=200)
                 st.line_chart(detail_data[['Close', 'SMA50', 'SMA200']].tail(150))
-                st.info(f"{selected_ticker} hissesinin son 150 günlük fiyat ve hareketli ortalama grafiği.")
-        except:
-            st.error("Grafik yüklenirken bir hata oluştu.")
+        except: st.error("Grafik yüklenirken bir hata oluştu.")
 
 # --- TAB 2: PORTFÖYÜM ---
 with tab2:
     st.subheader("💼 Portföyüm")
     if 'portfolio_data' not in st.session_state:
         st.session_state.portfolio_data = pd.DataFrame([{"Hisse": "THYAO", "Adet": 0, "Maliyet": 0.0}])
-    edited_df = st.data_editor(
-        st.session_state.portfolio_data, 
-        num_rows="dynamic", 
-        use_container_width=True, 
-        hide_index=True
-    )
+    edited_df = st.data_editor(st.session_state.portfolio_data, num_rows="dynamic", use_container_width=True, hide_index=True)
     st.session_state.portfolio_data = edited_df
 
-# --- TAB 3: HABERLER (GOOGLE NEWS RSS) ---
+# --- TAB 3: HABERLER (GELİŞMİŞ MANTIK) ---
 with tab3:
-    st.subheader("📰 Güncel Haberler (Google News)")
-    news_ticker = st.selectbox("Hisse Seçin:", bist_full_list, key="news_ticker")
-    if news_ticker:
+    st.subheader("📰 Borsa Haber Akışı")
+    
+    # Haberler için seçenek listesine "Genel BIST Haberleri"ni en başa ekliyoruz
+    news_options = ["Genel BIST Haberleri"] + bist_full_list
+    news_ticker = st.selectbox("Hisse Seçin (Özel haber için seçin, genel akış için bırakın):", news_options, key="news_ticker")
+    
+    # Arama sorgusunu belirleme
+    if news_ticker == "Genel BIST Haberleri":
+        # Hiçbir hisse seçilmediyse veya genel seçiliyse geniş kapsamlı bir sorgu yap
+        query_text = "Borsa İstanbul ekonomi borsa haberleri"
+    else:
+        # Belirli bir hisse seçildiyse ona odaklan
         hisse_sade = news_ticker.replace(".IS", "")
-        query = quote(f"{hisse_sade} hisse borsa")
-        rss_url = f"https://news.google.com/rss/search?q={query}&hl=tr&gl=TR&ceid=TR:tr"
-        feed = feedparser.parse(rss_url)
-        
-        if feed.entries:
-            for entry in feed.entries[:8]:
+        query_text = f"{hisse_sade} hisse borsa"
+    
+    rss_url = f"https://news.google.com/rss/search?q={quote(query_text)}&hl=tr&gl=TR&ceid=TR:tr"
+    feed = feedparser.parse(rss_url)
+    
+    if feed.entries:
+        for entry in feed.entries[:10]:
+            with st.container():
                 st.markdown(f"### [{entry.title}]({entry.link})")
                 st.caption(f"📅 {entry.published} | 🏢 {entry.source.title}")
                 st.divider()
-        else:
-            st.write("Bu hisse için güncel haber bulunamadı.")
+    else:
+        st.info("Şu an için uygun haber bulunamadı.")
 
 st.markdown("---")
 st.caption("BIST Master Analiz Terminali | Google News & Yahoo Finance Entegrasyonu")

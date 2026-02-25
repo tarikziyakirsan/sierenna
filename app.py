@@ -41,7 +41,7 @@ st.markdown("""
         box-shadow: 0px 2px 5px rgba(0,0,0,0.1);
     ">
         <strong>⚠️ Yasal Bilgilendirme:</strong> 
-        Bu veriler bilgilendirme amaçlıdır, yatırım tavsiyesi değildir. Tüm sorumluluk kullanıcıya aittir.
+        Bu terminal ve veriler bilgilendirme amaçlıdır, yatırım tavsiyesi değildir. Tüm sorumluluk kullanıcıya aittir.
     </div>
 """, unsafe_allow_html=True)
 

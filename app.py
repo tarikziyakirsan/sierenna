@@ -4,7 +4,7 @@ import pandas as pd
 import pandas_ta as ta
 
 # --- 1. SAYFA AYARLARI VE SIDEBAR'I TAMAMEN GİZLEME ---
-st.set_page_config(page_title="BIST Master Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="BIST Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
 
 # Sidebar'ı ve açılır kapanır oku tamamen ortadan kaldıran CSS
 st.markdown("""
@@ -20,7 +20,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. BAŞLIK VE YASAL UYARI ---
-st.title("📊 BIST Tüm Şirketler Master Analiz Paneli")
+st.title("📊 BIST Analiz Paneli")
 st.write("Teknik Momentum, Temel Değerleme ve Performans Denetimi")
 
 st.warning("⚠️ **Yasal Uyarı:** Bu uygulama bilgilendirme amaçlıdır. Burada yer alan veriler, analizler ve skorlar kesinlikle **yatırım tavsiyesi değildir.** Piyasa verileri gecikmeli olabilir ve analiz sonuçları hata payı içerebilir. Yapılan tüm işlemlerin riski ve sorumluluğu tamamen kullanıcıya aittir.")

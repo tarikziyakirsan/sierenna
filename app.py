@@ -20,7 +20,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. BAŞLIK VE ESKİ SARI UYARI YAZISI ---
-st.title("Bist Master Analiz Terminali")
 
 # Sayfa Yapılandırması
 st.set_page_config(page_title="BIST Tüm Evren Analizi", layout="wide")

@@ -25,7 +25,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. BAŞLIK VE NAZİK YASAL UYARI ---
-st.title("📊 BIST Analiz Terminali")
+st.title("📊 BIST Analiz dTerminali")
 
 st.markdown("""
     <div style="

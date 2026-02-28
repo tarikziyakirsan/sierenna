@@ -4,45 +4,42 @@ import pandas as pd
 import pandas_ta as ta
 import feedparser
 import pytz
-import google.generativeai as genai
 from urllib.parse import quote
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 
-# --- 1. AI AYARLARI (Gemini) ---
-genai.configure(api_key="AIzaSyBa4qF36wC3-WMiBkCRf7mdwWijTcOYb-E")
-model = genai.GenerativeModel('gemini-1.5-flash')
-
-# --- 2. SAYFA AYARLARI VE TASARIM ---
+# --- 1. SAYFA AYARLARI VE TASARIM ---
 st.set_page_config(page_title="BIST Analiz Terminali", layout="wide", initial_sidebar_state="collapsed")
+
 TR_TZ = pytz.timezone('Europe/Istanbul')
 
-# CSS: Sidebar ve "Running" bildirimlerini gizleme
+# Sidebar, Spinner ve "Running" yazılarını tamamen gizleyen CSS
 st.markdown("""
     <style>
         [data-testid="stSidebar"], [data-testid="stSidebarNav"] {display: none !important;}
         .stApp { margin-left: 0px; }
         .stDataFrame {border: 1px solid #f0f2f6; border-radius: 10px;}
+        /* Streamlit'in otomatik "Running" yazılarını gizle */
         [data-testid="stStatusWidget"], .stStatusWidget {display: none !important;}
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. BAŞLIK VE NAZİK YASAL UYARI ---
+# --- 2. BAŞLIK VE NAZİK YASAL UYARI ---
 st.title("📊 BIST Analiz Terminali")
 
 st.markdown("""
     <div style="
-        background-color: #ffca28; color: #4e342e; padding: 10px 30px; border-radius: 50px; 
-        border: 1px solid #f57f17; width: fit-content; margin: 0 auto 20px auto; 
+        background-color: #ffca28; color: #4e342e; padding: 10px 30px; border-radius: 50px;
+        border: 1px solid #f57f17; width: fit-content; margin: 0 auto 20px auto;
         font-size: 14.5px; font-weight: 500; text-align: center; line-height: 1.4;
         box-shadow: 0px 4px 8px rgba(0,0,0,0.1);
     ">
-        ⚠️ <strong>Bilgilendirme:</strong> Bu terminaldeki veri ve analizler yatırım tavsiyesi değildir ve profesyonel bir kullanım amacı taşımamaktadır. 
+        ⚠️ <strong>Bilgilendirme:</strong> Bu terminaldeki veri ve analizler yatırım tavsiyesi değildir ve profesyonel bir kullanım amacı taşımamaktadır.
         Tüm sorumluluğun kullanıcıya ait olduğunu hatırlatmak isteriz.
     </div>
 """, unsafe_allow_html=True)
 
-# --- 4. HİSSE LİSTESİ ---
+# --- 3. HİSSE LİSTESİ ---
 bist_full_list = sorted(list(set([
     "A1CAP.IS", "ACSEL.IS", "ADEZ.IS", "ADESE.IS", "AEFES.IS", "AFYON.IS", "AGESA.IS", "AGHOL.IS", "AGROT.IS", "AHGAZ.IS",
     "AKBNK.IS", "AKCNS.IS", "AKENR.IS", "AKFGY.IS", "AKFYE.IS", "AKGRT.IS", "AKMGY.IS", "AKSA.IS", "AKSEN.IS", "ALARK.IS",
@@ -95,24 +92,8 @@ bist_full_list = sorted(list(set([
 def fetch_master_data(tickers):
     return yf.download(tickers, period="1y", interval="1d", group_by='ticker', progress=False)
 
-# --- AI ANALİZ FONKSİYONU ---
-def get_ai_insight(ticker_name, tech_row, news_entries):
-    news_text = "\n".join([f"- {e.title}" for e in news_entries[:5]])
-    prompt = f"""
-    Sen uzman bir borsa analistisin. {ticker_name} hissesini analiz et.
-    TEKNİK: Fiyat:{tech_row['Fiyat']}, RSI:{tech_row['RSI']}, 1A:%{tech_row['1A %']}, Sinyal:{tech_row['Sinyal']}
-    HABERLER/KAP: {news_text}
-    GÖREV: Teknik ve haberleri sentezle. Riskleri ve fırsatları belirt. 
-    Kısa, net ve yatırımcıyı aydınlatan bir tavsiye ver.
-    """
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except:
-        return "Analiz şu an yapılamıyor."
-
-# --- 5. SEKMELER ---
-tab1, tab2, tab3, tab4 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Haberler", "🤖 Gemini AI"])
+# --- 4. SEKMELER ---
+tab1, tab2, tab3 = st.tabs(["🚀 Pazar Analizi", "💰 Portföyüm", "📰 Haberler"])
 
 # --- TAB 1: PAZAR ANALİZİ ---
 with tab1:
@@ -125,7 +106,8 @@ with tab1:
 
     if "analysis_results" not in st.session_state:
         st.session_state.analysis_results = None
-    
+
+    # Grafik kontrolü için state
     if "selected_chart_ticker" not in st.session_state:
         st.session_state.selected_chart_ticker = "THYAO.IS"
 
@@ -135,25 +117,25 @@ with tab1:
         progress_bar = st.progress(0)
         status_text = st.empty()
         total_tickers = len(bist_full_list)
-        
+
         for i, ticker in enumerate(bist_full_list):
             try:
                 status_text.text(f"Analiz ediliyor: {ticker} ({i+1}/{total_tickers})")
                 df = raw_data[ticker].copy().dropna()
                 if len(df) < 130: continue
-                
+
                 cp = df['Close'].iloc[-1]
                 prev_p = df['Close'].iloc[-2]
-                
+
                 day_chg = ((cp - prev_p) / prev_p) * 100
                 ret_1m = ((cp - df['Close'].iloc[-22]) / df['Close'].iloc[-22]) * 100
                 ret_3m = ((cp - df['Close'].iloc[-63]) / df['Close'].iloc[-63]) * 100
                 ret_6m = ((cp - df['Close'].iloc[-126]) / df['Close'].iloc[-126]) * 100
-                
+
                 df['RSI'] = ta.rsi(df['Close'], length=14)
                 rsi = df['RSI'].iloc[-1]
                 sma50 = ta.sma(df['Close'], length=50).iloc[-1]
-                
+
                 skor = 0
                 if 30 < rsi < 45: skor += 20
                 if cp > sma50: skor += 20
@@ -181,28 +163,34 @@ with tab1:
 
     # --- ANINDA ARAMA VE TABLO ---
     if st.session_state.analysis_results is not None:
+        # 1. ANINDA ARAMA: Selectbox kullanarak arama barı kurgusu (Enter gerektirmez)
         search_ticker = st.selectbox(
-            "🔍 Listeden Hisseye Git / Ara:", 
+            "🔍 Listeden Hisseye Git / Ara:",
             options=st.session_state.analysis_results["Hisse"].tolist(),
             index=None,
-            placeholder="Hisse kodu yazın...",
+            placeholder="Hisse kodu yazın (Örn: THY, ASELS)...",
             key="instant_search"
         )
-        
+
         df_display = st.session_state.analysis_results.copy()
+
+        # Eğer bir hisse seçildiyse tabloyu sadece o hisseye süz
         if search_ticker:
             df_display = df_display[df_display["Hisse"] == search_ticker]
+            # Arama yapıldığında grafiği de o hisseye odakla
             st.session_state.selected_chart_ticker = search_ticker + ".IS"
         else:
+            # Arama yoksa sadece skor eşiğine göre filtrele
             df_display = df_display[df_display["Skor"] >= score_threshold]
 
-        st.success(f"Listelenen hisse sayısı: {len(df_display)}. Tıklayarak grafiği ve AI yorumunu güncelleyin.")
-        
+        st.success(f"Listelenen hisse sayısı: {len(df_display)}. Satıra tıklayarak grafiği güncelleyebilirsiniz.")
+
+        # 2. TABLODAN TIKLAYINCA GRAFİK GÜNCELLEME
         selection_event = st.dataframe(
             df_display.sort_values(by="Skor", ascending=False),
             use_container_width=True,
             hide_index=True,
-            on_select="rerun",
+            on_select="rerun", # Tıklanınca sayfayı tetikle
             selection_mode="single-row",
             column_config={
                 "Skor": st.column_config.ProgressColumn("Skor", min_value=0, max_value=100, format="%d"),
@@ -213,57 +201,91 @@ with tab1:
             }
         )
 
+        # Tablodan tıklanan satırı yakala ve state'i güncelle
         if selection_event.selection.rows:
-            idx = selection_event.selection.rows[0]
-            curr_sorted = df_display.sort_values(by="Skor", ascending=False)
-            clicked = curr_sorted.iloc[idx]["Hisse"]
-            st.session_state.selected_chart_ticker = clicked + ".IS"
+            selected_row_index = selection_event.selection.rows[0]
+            current_sorted_df = df_display.sort_values(by="Skor", ascending=False)
+            clicked_hisse = current_sorted_df.iloc[selected_row_index]["Hisse"]
+            st.session_state.selected_chart_ticker = clicked_hisse + ".IS"
 
     st.markdown("---")
-    st.subheader("📈 Teknik Grafik")
+    st.subheader("📈 Hisse Teknik Grafik İnceleme")
+
+    # State'deki hissenin listedeki yerini hesapla (Senkronizasyon)
     try:
         current_list_idx = bist_full_list.index(st.session_state.selected_chart_ticker)
-    except: current_list_idx = 0
+    except:
+        current_list_idx = 0
 
-    selected_ticker_final = st.selectbox("İncele:", bist_full_list, index=current_list_idx, key="detail_select")
+    selected_ticker_final = st.selectbox(
+        "Seçili Hisse:",
+        bist_full_list,
+        index=current_list_idx,
+        key="detail_select"
+    )
+
     if selected_ticker_final:
         st.session_state.selected_chart_ticker = selected_ticker_final
-        h_obj = yf.Ticker(selected_ticker_final)
-        d_data = h_obj.history(period="2y")
-        if not d_data.empty:
-            d_data['SMA50'] = ta.sma(d_data['Close'], length=50)
-            d_data['SMA200'] = ta.sma(d_data['Close'], length=200)
-            st.line_chart(d_data[['Close', 'SMA50', 'SMA200']].tail(150))
+        try:
+            h_obj = yf.Ticker(selected_ticker_final)
+            d_data = h_obj.history(period="2y")
+            if not d_data.empty:
+                d_data['SMA50'] = ta.sma(d_data['Close'], length=50)
+                d_data['SMA200'] = ta.sma(d_data['Close'], length=200)
+                st.line_chart(d_data[['Close', 'SMA50', 'SMA200']].tail(150))
+        except: st.error("Grafik yüklenemedi.")
 
-# --- TAB 4: GEMINI AI ---
-with tab4:
-    st.subheader("🤖 Gemini Yapay Zeka Analizi")
-    ai_hisse = st.session_state.selected_chart_ticker.replace(".IS", "")
-    st.info(f"Seçili Hisse: **{ai_hisse}**")
-    
-    if st.button(f"{ai_hisse} İçin AI Raporu Oluştur"):
-        if st.session_state.analysis_results is not None:
-            # Teknik Veriyi Al
-            row = st.session_state.analysis_results[st.session_state.analysis_results["Hisse"] == ai_hisse].iloc[0]
-            # Haberleri Al
-            q = f"{ai_hisse} (hisse OR kap OR borsa)"
-            f = feedparser.parse(f"https://news.google.com/rss/search?q={quote(q)}&hl=tr&gl=TR&ceid=TR:tr")
-            
-            with st.status("Gemini verileri analiz ediyor...", expanded=True):
-                ai_text = get_ai_insight(ai_hisse, row, f.entries)
-                st.write(ai_text)
-        else:
-            st.warning("Önce Pazar Analizi sekmesinden tarama yapmalısınız.")
-
-# --- TAB 2 & 3 (Kısa halleri) ---
+# --- TAB 2: PORTFÖYÜM ---
 with tab2:
-    st.subheader("💼 Portföy")
+    st.subheader("💼 Portföy Yönetimi")
     if 'my_portfolio' not in st.session_state: st.session_state.my_portfolio = []
-    # (Portföy kodların burada devam ediyor...)
 
+    with st.expander("➕ Hisse Ekle", expanded=True):
+        c1, c2, c3 = st.columns([3, 1, 1])
+        with c1: stock = st.selectbox("Hisse:", options=bist_full_list, index=None, placeholder="Ara...", key="p_sel")
+        with c2: lot = st.number_input("Adet", min_value=1, value=1)
+        with c3: cost = st.number_input("Maliyet", min_value=0.0, step=0.01)
+        if st.button("Ekle"):
+            if stock:
+                st.session_state.my_portfolio.append({"Hisse": stock, "Adet": lot, "Maliyet": cost})
+                st.rerun()
+
+    if st.session_state.my_portfolio:
+        df_p = pd.DataFrame(st.session_state.my_portfolio)
+        try:
+            prices = yf.download(df_p['Hisse'].unique().tolist(), period="1d", interval="1m", progress=False)['Close'].iloc[-1]
+            def calc(row):
+                curr = prices[row['Hisse']] if len(df_p['Hisse'].unique()) > 1 else prices
+                val = curr * row['Adet']
+                pl = val - (row['Maliyet'] * row['Adet'])
+                return pd.Series([round(curr, 2), round(val, 2), round(pl, 2)])
+            df_p[['Fiyat', 'Değer', 'K/Z']] = df_p.apply(calc, axis=1)
+            st.metric("Toplam Portföy", f"{df_p['Değer'].sum():,.2f} TL")
+            st.dataframe(df_p, use_container_width=True, hide_index=True)
+            if st.button("Sıfırla"): st.session_state.my_portfolio = []; st.rerun()
+        except: st.warning("Veriler bekleniyor...")
+
+# --- TAB 3: HABERLER ---
 with tab3:
-    st.subheader("📰 Haber Akışı")
-    # (Haber kodların burada devam ediyor...)
+    st.subheader("📰 Canlı Haber Terminali")
+    n_options = ["Canlı Akış (Tüm Şirketler)"] + bist_full_list
+    n_ticker = st.selectbox("Filtre:", n_options, key="n_filt")
+    q = "(hisse OR borsa OR kap OR bist) when:1d" if n_ticker == "Canlı Akış (Tüm Şirketler)" else f"{n_ticker.replace('.IS', '')} (hisse OR kap OR borsa)"
+    feed = feedparser.parse(f"https://news.google.com/rss/search?q={quote(q)}&hl=tr&gl=TR&ceid=TR:tr")
+    if feed.entries:
+        proc = []
+        for e in feed.entries:
+            try:
+                dt = parsedate_to_datetime(e.published).astimezone(TR_TZ)
+                e.sort_time = dt; proc.append(e)
+            except: continue
+        proc.sort(key=lambda x: x.sort_time, reverse=True)
+        for e in proc[:20]:
+            st.markdown(f"### [{e.title}]({e.link})")
+            st.caption(f"🕒 {e.sort_time.strftime('%d.%m.%Y %H:%M')} | {e.source.title}")
+            st.divider()
+    else: st.info("Haber bulunamadı.")
 
+# --- ALT BİLGİ ---
 st.markdown("---")
 st.caption(f"BIST Analiz Terminali | Son Güncelleme: {datetime.now(TR_TZ).strftime('%d.%m.%Y %H:%M')}")
